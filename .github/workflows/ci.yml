@@ -19,6 +19,7 @@ jobs:
           node-version: '24'
           package-manager-cache: false
       - run: npm ci
+      - run: npm run types:check
       - run: npm run lint
       - run: npm run format:check
       - run: npm test

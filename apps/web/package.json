@@ -6,7 +6,8 @@
     "dev": "vite dev",
     "build": "vite build",
     "types": "wrangler types -c wrangler.json -c ../relay/wrangler.json",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "types:check": "wrangler types --check -c wrangler.json -c ../relay/wrangler.json"
   },
   "devDependencies": {
     "@sveltejs/adapter-cloudflare": "^8.0.2",

@@ -19,7 +19,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"{apps,tests}/**/*.{js,ts,svelte,html}\" eslint.config.js",
-    "format:check": "prettier --check \"{apps,tests}/**/*.{js,ts,svelte,html}\" eslint.config.js"
+    "format:check": "prettier --check \"{apps,tests}/**/*.{js,ts,svelte,html}\" eslint.config.js",
+    "types:check": "npm run types:check --workspaces"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

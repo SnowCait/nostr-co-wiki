@@ -6,3 +6,9 @@ updates:
       interval: quarterly
     cooldown:
       default-days: 14
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: quarterly
+    cooldown:
+      default-days: 14
