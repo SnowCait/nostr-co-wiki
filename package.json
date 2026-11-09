@@ -13,7 +13,7 @@
     "dev:web": "npm run dev --workspace @nostr-co-wiki/web",
     "dev:relay": "npm run dev --workspace @nostr-co-wiki/relay",
     "build": "npm run build --workspaces",
-    "test": "npm run check && npm run build && node --test tests/*.test.js",
+    "test": "npm run check && npm run build && node --test tests/*.test.js apps/relay/tests/*.test.js",
     "types": "npm run types --workspaces",
     "check": "npm run types && npm run check --workspaces",
     "lint": "eslint .",
