@@ -1,6 +1,6 @@
 import type { Event } from "nostr-tools/pure";
 import {
-  bytes,
+  parseFilter,
   matches,
   newestFirst,
   searchRank,
@@ -45,7 +45,8 @@ export function getHistory(
 
 export function queryEvents(sql: SqlStorage, filters: Filter[]): Event[] {
   const results = new Map<string, Event>();
-  for (const filter of filters) {
+  for (const input of filters) {
+    const filter = parseFilter(input);
     if (filter.limit === 0) continue;
     const query =
       filter.search === undefined ? undefined : searchText(filter.search);
@@ -57,21 +58,6 @@ export function queryEvents(sql: SqlStorage, filters: Filter[]): Event[] {
          JOIN events e ON e.id = a.published_event_id WHERE a.is_published = 1 AND article_fts MATCH ?`;
     const bindings: SqlStorageValue[] =
       query === undefined ? [] : [`"${query.replaceAll('"', '""')}"`];
-    const constrain = (column: string, values: SqlStorageValue[]) => {
-      statement += ` AND ${column} IN (${values.map(() => "?").join(",")})`;
-      bindings.push(...values);
-    };
-    if (filter.kinds) constrain("e.kind", filter.kinds);
-    if (filter.ids)
-      constrain(
-        "e.id",
-        filter.ids.map((id) => bytes(id).buffer),
-      );
-    if (filter.authors)
-      constrain(
-        "e.pubkey",
-        filter.authors.map((author) => bytes(author).buffer),
-      );
     if (filter.since !== undefined) {
       statement += " AND e.created_at >= ?";
       bindings.push(filter.since);
@@ -80,6 +66,23 @@ export function queryEvents(sql: SqlStorage, filters: Filter[]): Event[] {
       statement += " AND e.created_at <= ?";
       bindings.push(filter.until);
     }
+    const constrain = (column: string, literals: string[]) => {
+      const constraint = ` AND ${column} IN (${literals.join(",")})`;
+      // SQL is ASCII here. Larger lists are still checked by matches() below.
+      if (statement.length + constraint.length <= 100_000)
+        statement += constraint;
+    };
+    if (filter.kinds) constrain("e.kind", filter.kinds.map(String));
+    if (filter.ids)
+      constrain(
+        "e.id",
+        filter.ids.map((id) => `X'${id}'`),
+      );
+    if (filter.authors)
+      constrain(
+        "e.pubkey",
+        filter.authors.map((author) => `X'${author}'`),
+      );
     const rows = sql.exec<{ data: string }>(statement, ...bindings);
     const events = rows
       .toArray()

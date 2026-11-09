@@ -105,7 +105,7 @@ export function parseFilter(value: unknown): Filter {
             ? integer(item) && item <= 65535
             : typeof item === "string" &&
               (!["ids", "authors", "#e", "#p"].includes(key) ||
-                hexId.test(item)),
+                (item.length === 64 && hexId.test(item))),
         )
       )
         throw new Error(`invalid: ${key} filter`);

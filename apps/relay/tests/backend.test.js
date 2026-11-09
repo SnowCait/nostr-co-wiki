@@ -44,7 +44,9 @@ async function connection(worker, t) {
   assert.equal(response.status, 101);
   const socket = response.webSocket;
   socket.accept();
-  t.after(() => socket.close());
+  t.after(() => {
+    if (socket.readyState === WebSocket.OPEN) socket.close();
+  });
   const inbox = [];
   const waiters = [];
   socket.addEventListener("message", (event) => {
@@ -134,6 +136,11 @@ test(
         async fetch(request, env, ctx) {
           const url = new URL(request.url);
           const wiki = env.WIKI.getByName("wiki");
+          if (url.pathname === "/__subscriptions") return Response.json(await wiki.subscriptionState());
+          if (url.pathname === "/__query") {
+            try { return Response.json(await wiki.queryUnchecked(await request.json())); }
+            catch (error) { return Response.json({ error: error.message }, { status: 400 }); }
+          }
           if (url.pathname === "/__article") return Response.json(await wiki.getArticle(url.searchParams.get("d")));
           if (url.pathname === "/__history") return Response.json(await wiki.getHistory(url.searchParams.get("d")));
           return web.fetch(request, env, ctx);
@@ -141,10 +148,30 @@ test(
       };
     `,
     );
+    const relayConfig = JSON.parse(
+      await readFile("apps/relay/wrangler.json", "utf8"),
+    );
+    const relayProbe = join(directory, "relay-probe.ts");
+    await writeFile(
+      relayProbe,
+      `
+      export { default } from ${JSON.stringify(resolve("apps/relay/src/index.ts"))};
+      import { Wiki as BackendWiki } from ${JSON.stringify(resolve("apps/relay/src/wiki.ts"))};
+      import { queryEvents } from ${JSON.stringify(resolve("apps/relay/src/query.ts"))};
+      export class Wiki extends BackendWiki {
+        subscriptionState() {
+          return Array.from(this.ctx.storage.kv.list({ prefix: "subscriptions:" }));
+        }
+        queryUnchecked(filters) {
+          return queryEvents(this.ctx.storage.sql, filters);
+        }
+      }
+      `,
+    );
     const server = createTestHarness({
       workers: [
         {
-          configPath: "apps/relay/wrangler.json",
+          config: { ...relayConfig, main: relayProbe },
           secrets: { WIKI_PRIVATE_KEY: nsecEncode(wikiKey) },
         },
         {
@@ -170,6 +197,9 @@ test(
     const relay = server.getWorker("nostr-co-wiki-relay");
     const web = server.getWorker("nostr-co-wiki-web");
     const wiki = {
+      async subscriptionState() {
+        return (await web.fetch("/__subscriptions")).json();
+      },
       async getArticle(d) {
         return (
           await web.fetch(`/__article?d=${encodeURIComponent(d)}`)
@@ -651,6 +681,157 @@ test(
     );
 
     await t.test(
+      "queries large ID, author and kind lists safely, including beyond the SQL length limit",
+      async () => {
+        const ids = Array.from({ length: 2000 }, (_, i) =>
+          i.toString(16).padStart(64, "0"),
+        );
+        for (const count of [200, 1000, 2000]) {
+          const results = await query(client, {
+            ids: [...ids.slice(0, count), first.id],
+            authors: [...ids.slice(0, count), first.pubkey],
+            kinds: [...Array.from({ length: 200 }, (_, i) => i), 2818],
+            since: first.created_at,
+            until: first.created_at,
+          });
+          assert.deepEqual(
+            results.map((event) => event.id),
+            [first.id],
+          );
+        }
+        // Exercise the query boundary directly, without the WebSocket parser.
+        for (const filter of [
+          { ids: ["0".repeat(64) + "' OR 1=1 --"] },
+          { authors: ["0".repeat(64) + "\n"] },
+          { authors: ["A".repeat(64)] },
+          { kinds: ["2818) OR 1=1 --"] },
+          { kinds: [-1] },
+        ]) {
+          const response = await web.fetch("/__query", {
+            method: "POST",
+            body: JSON.stringify([filter]),
+          });
+          assert.equal(response.status, 400);
+          assert.match((await response.json()).error, /^invalid:/);
+        }
+        assert.equal(
+          (await query(client, { ids: [first.id] }))[0].id,
+          first.id,
+        );
+      },
+    );
+
+    await t.test(
+      "persists large subscriptions across hibernation and deletes their KV state on disconnect",
+      async () => {
+        const watcher = await connection(relay, t);
+        const event = revision("large-subscriptions");
+        const filler = Array.from({ length: 400 }, (_, i) =>
+          i.toString(16).padStart(64, "0"),
+        );
+        const authors = {
+          kinds: [3818],
+          authors: [...filler, wikiPubkey],
+          limit: 0,
+        };
+        const references = {
+          kinds: [3818],
+          "#e": [...filler, event.id],
+          limit: 0,
+        };
+        assert.ok(JSON.stringify(authors).length > 16 * 1024);
+        assert.ok(JSON.stringify(references).length > 16 * 1024);
+        watcher.send(["REQ", "large-authors", authors, authors]);
+        await watcher.next((message) => message[0] === "EOSE");
+        watcher.send(["REQ", "large-references", references]);
+        await watcher.next((message) => message[0] === "EOSE");
+        const state = await wiki.subscriptionState();
+        const key = state.find(([, subs]) =>
+          subs.some((sub) => sub.id === "large-authors"),
+        )[0];
+        await relay.evictDurableObject("Wiki", {
+          name: "wiki",
+          webSockets: "hibernate",
+        });
+        assert.equal((await publish(client, event))[2], true);
+        for (const id of ["large-authors", "large-references"]) {
+          const message = await watcher.next(
+            (message) => message[0] === "EVENT" && message[1] === id,
+          );
+          assert.equal(tag(message[2], "e"), event.id);
+        }
+        await query(watcher, { limit: 0 });
+        assert.equal(
+          watcher.inbox.filter((message) => message[0] === "EVENT").length,
+          0,
+        );
+        watcher.socket.close(1000);
+        for (let attempt = 0; attempt < 100; attempt++) {
+          if (
+            !(await wiki.subscriptionState()).some(([entry]) => entry === key)
+          )
+            break;
+          await delay(10);
+        }
+        assert.equal(
+          (await wiki.subscriptionState()).some(([entry]) => entry === key),
+          false,
+        );
+      },
+    );
+
+    await t.test(
+      "rejects an oversized KV subscription without retaining the replaced filter or losing other subscriptions",
+      async () => {
+        const watcher = await connection(relay, t);
+        watcher.send(["REQ", "kept", { kinds: [2818], limit: 0 }]);
+        await watcher.next((message) => message[0] === "EOSE");
+        watcher.send(["REQ", "replaced", { kinds: [2818], limit: 0 }]);
+        await watcher.next((message) => message[0] === "EOSE");
+        watcher.send([
+          "REQ",
+          "replaced",
+          { "#x": ["x".repeat(9 * 1024 * 1024)], limit: 0 },
+        ]);
+        const rejected = await watcher.next(
+          (message) => message[0] === "CLOSED",
+        );
+        assert.equal(rejected[1], "replaced");
+        assert.match(rejected[2], /^error: unable to store subscription state/);
+        const subscriptions = (await wiki.subscriptionState()).find(
+          ([, subs]) => subs.some((sub) => sub.id === "kept"),
+        )[1];
+        assert.deepEqual(
+          subscriptions.map((sub) => sub.id),
+          ["kept"],
+        );
+        const event = revision("after-kv-rejection");
+        assert.equal((await publish(client, event))[2], true);
+        assert.equal(
+          (
+            await watcher.next(
+              (message) => message[0] === "EVENT" && message[1] === "kept",
+            )
+          )[2].id,
+          event.id,
+        );
+        await query(watcher, { limit: 0 });
+        assert.equal(
+          watcher.inbox.some((message) => message[1] === "replaced"),
+          false,
+        );
+        watcher.send(["CLOSE", "kept"]);
+        await query(watcher, { limit: 0 });
+        assert.equal(
+          (await wiki.subscriptionState()).some(([, subs]) =>
+            subs.some((sub) => sub.id === "kept"),
+          ),
+          false,
+        );
+      },
+    );
+
+    await t.test(
       "keeps subscriptions independent, replaces and closes them, and restores them after hibernation",
       async () => {
         const watcher = await connection(relay, t);
@@ -918,6 +1099,7 @@ test(
           webSockets: "close",
         });
         assert.deepEqual(await wiki.getHistory("nostr"), before);
+        assert.deepEqual(await wiki.subscriptionState(), []);
         assert.deepEqual(
           await db.exec(
             "SELECT * FROM event_receipts WHERE revision_id = ?",

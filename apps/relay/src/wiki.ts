@@ -13,8 +13,10 @@ import {
 
 interface Connection {
   ip: string;
-  subscriptions: { id: string; filters: Filter[] }[];
+  id: string;
 }
+
+type Subscription = { id: string; filters: Filter[] };
 
 interface WikiEnvironment {
   WIKI_PRIVATE_KEY: string;
@@ -24,6 +26,16 @@ export class Wiki extends DurableObject<WikiEnvironment> {
   constructor(ctx: DurableObjectState, env: WikiEnvironment) {
     super(ctx, env);
     ctx.storage.sql.exec(schema);
+    // A forced restart can lose sockets without running their close handlers.
+    const connections = new Set(
+      ctx.getWebSockets().map((socket) => {
+        const connection: Connection = socket.deserializeAttachment();
+        return `subscriptions:${connection.id}`;
+      }),
+    );
+    for (const [key] of ctx.storage.kv.list({ prefix: "subscriptions:" })) {
+      if (!connections.has(key)) ctx.storage.kv.delete(key);
+    }
   }
 
   fetch(request: Request): Response {
@@ -37,7 +49,10 @@ export class Wiki extends DurableObject<WikiEnvironment> {
     if (!ip) return new Response("Missing connection address", { status: 400 });
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ ip, subscriptions: [] } satisfies Connection);
+    server.serializeAttachment({
+      ip,
+      id: crypto.randomUUID(),
+    } satisfies Connection);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -98,22 +113,22 @@ export class Wiki extends DurableObject<WikiEnvironment> {
         return;
       }
       const connection: Connection = socket.deserializeAttachment();
-      connection.subscriptions = connection.subscriptions.filter(
-        (sub) => sub.id !== id,
-      );
-      socket.serializeAttachment(connection);
-      if (message[0] === "CLOSE") return;
+      const key = `subscriptions:${connection.id}`;
       try {
+        const subscriptions = (
+          this.ctx.storage.kv.get<Subscription[]>(key) ?? []
+        ).filter((sub) => sub.id !== id);
+        // Remove a replaced subscription before validation. A failed REQ closes it.
+        if (subscriptions.length) this.ctx.storage.kv.put(key, subscriptions);
+        else this.ctx.storage.kv.delete(key);
+        if (message[0] === "CLOSE") return;
         if (message.length < 3) throw new Error("invalid: REQ needs filters");
         const filters = message.slice(2).map(parseFilter);
         const events = queryEvents(this.ctx.storage.sql, filters);
-        connection.subscriptions.push({ id, filters });
         try {
-          socket.serializeAttachment(connection);
+          this.ctx.storage.kv.put(key, [...subscriptions, { id, filters }]);
         } catch {
-          throw new Error(
-            "error: subscription state exceeds connection capacity",
-          );
+          throw new Error("error: unable to store subscription state");
         }
         for (const event of events) this.#send(socket, ["EVENT", id, event]);
         this.#send(socket, ["EOSE", id]);
@@ -133,10 +148,14 @@ export class Wiki extends DurableObject<WikiEnvironment> {
   }
 
   webSocketClose(socket: WebSocket, code: number): void {
+    const connection: Connection = socket.deserializeAttachment();
+    this.ctx.storage.kv.delete(`subscriptions:${connection.id}`);
     socket.close(code);
   }
 
   webSocketError(socket: WebSocket): void {
+    const connection: Connection = socket.deserializeAttachment();
+    this.ctx.storage.kv.delete(`subscriptions:${connection.id}`);
     socket.close(1011, "Connection error");
   }
 
@@ -157,7 +176,11 @@ export class Wiki extends DurableObject<WikiEnvironment> {
   #broadcast(event: Event): void {
     for (const socket of this.ctx.getWebSockets()) {
       const connection: Connection = socket.deserializeAttachment();
-      for (const sub of connection.subscriptions) {
+      const subscriptions =
+        this.ctx.storage.kv.get<Subscription[]>(
+          `subscriptions:${connection.id}`,
+        ) ?? [];
+      for (const sub of subscriptions) {
         if (sub.filters.some((filter) => matches(event, filter)))
           this.#send(socket, ["EVENT", sub.id, event]);
       }
