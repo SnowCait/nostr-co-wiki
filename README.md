@@ -21,6 +21,12 @@ npm run build
 npm test
 ```
 
+Application code uses TypeScript with strict checking. `npm test` generates Worker
+binding types, checks both applications, builds them, and runs the runtime test.
+Use `npm run types` to regenerate the committed `worker-configuration.d.ts` files
+after changing Wrangler configuration; do not edit those files manually.
+`npm run check` runs type generation and checking without building.
+
 The runtime test checks server-rendered HTML and Web-to-Relay/DO bindings using
 local Workers. Its connection probes exist only in the test entry point.
 

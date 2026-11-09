@@ -4,13 +4,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build"
+    "build": "vite build",
+    "types": "wrangler types -c wrangler.json -c ../relay/wrangler.json",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
   },
   "devDependencies": {
     "@sveltejs/adapter-cloudflare": "^8.0.2",
     "@sveltejs/kit": "^3.1.1",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@types/node": "^24.19.2",
     "svelte": "^5.57.3",
+    "svelte-check": "^4.7.8",
     "vite": "^8.3.7"
   }
 }
