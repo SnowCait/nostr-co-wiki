@@ -1,0 +1,12 @@
+{
+  "name": "@nostr-co-wiki/relay",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "wrangler deploy --dry-run --outdir .wrangler/build",
+    "types": "wrangler types",
+    "check": "tsc --project tsconfig.json",
+    "types:check": "wrangler types --check"
+  }
+}

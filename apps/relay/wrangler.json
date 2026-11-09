@@ -1,0 +1,8 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "nostr-co-wiki-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-09",
+  "durable_objects": {"bindings": [{"name": "WIKI", "class_name": "Wiki"}]},
+  "exports": {"Wiki": {"type": "durable-object", "storage": "sqlite"}}
+}
