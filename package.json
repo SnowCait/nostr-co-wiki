@@ -1,0 +1,15 @@
+{
+  "name": "nostr-co-wiki",
+  "private": true,
+  "type": "module",
+  "workspaces": ["apps/*"],
+  "engines": {"node": ">=24"},
+  "scripts": {
+    "dev": "npm run build --workspace @nostr-co-wiki/web && wrangler dev -c apps/web/wrangler.json -c apps/relay/wrangler.json",
+    "dev:web": "npm run dev --workspace @nostr-co-wiki/web",
+    "dev:relay": "npm run dev --workspace @nostr-co-wiki/relay",
+    "build": "npm run build --workspaces",
+    "test": "npm run build && node --test tests/*.test.js"
+  },
+  "devDependencies": {"wrangler": "^4.158.0"}
+}
