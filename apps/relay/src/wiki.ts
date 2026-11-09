@@ -82,8 +82,7 @@ export class Wiki extends DurableObject<WikiEnvironment> {
         accepted = await this.#acceptRevision(event, connection.ip);
       } catch (error) {
         const reason =
-          error instanceof Error &&
-          /^(invalid|unsupported|conflict|blocked):/.test(error.message)
+          error instanceof Error && /^(invalid|blocked):/.test(error.message)
             ? error.message
             : "error: unable to accept Revision";
         this.#send(socket, ["OK", id, false, reason]);
@@ -262,7 +261,9 @@ export class Wiki extends DurableObject<WikiEnvironment> {
         return [];
       const previous = article ? this.#event(article.head_commit_id) : null;
       if (previous?.id !== base)
-        throw new Error("conflict: base Commit does not match current article");
+        throw new Error(
+          "blocked: edit conflict: base Commit does not match current article",
+        );
       const published = article?.published_event_id
         ? this.#event(article.published_event_id)
         : null;

@@ -341,7 +341,10 @@ test(
         for (const event of invalid) {
           const result = await publish(client, event);
           assert.equal(result[2], false, JSON.stringify(event));
-          assert.match(result[3], /^(invalid|unsupported):/);
+          assert.match(
+            result[3],
+            event.kind === 2818 ? /^invalid:/ : /^blocked:/,
+          );
         }
         assert.deepEqual(await query(client, {}), []);
         assert.equal(
@@ -487,7 +490,10 @@ test(
           publish(editorB, revision("nostr", currentBase, "race B")),
         ]);
         assert.equal(race.filter((message) => message[2]).length, 1);
-        assert.match(race.find((message) => !message[2])[3], /^conflict:/);
+        assert.match(
+          race.find((message) => !message[2])[3],
+          /^blocked:.*conflict/,
+        );
         const afterRace = await wiki.getHistory("nostr");
         assert.equal(afterRace.length, 3);
         assert.equal(tag(afterRace[2].commit, "prev"), afterRace[1].commit.id);

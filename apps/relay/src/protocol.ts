@@ -68,7 +68,7 @@ export function signedEvent(value: unknown): Event {
 
 export function revisionTarget(event: Event, wikiPubkey: string): string {
   if (event.kind !== 2818)
-    throw new Error("unsupported: only Wiki Revisions may be submitted");
+    throw new Error("blocked: only Wiki Revisions may be submitted");
   for (const name of ["a", "e", "title", "summary", "edit_summary"]) {
     const tags = event.tags.filter((tag) => tag[0] === name);
     if (tags.length > 1 || tags.some((tag) => tag.length < 2))
