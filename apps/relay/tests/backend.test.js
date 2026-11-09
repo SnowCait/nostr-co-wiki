@@ -136,6 +136,18 @@ test(
         async fetch(request, env, ctx) {
           const url = new URL(request.url);
           const wiki = env.WIKI.getByName("wiki");
+          if (url.pathname === "/__alarm") {
+            if (request.method === "POST") await wiki.triggerCleanup(url.searchParams.has("fail"));
+            return Response.json(await wiki.alarmState());
+          }
+          if (url.pathname === "/__fail-alarm") {
+            await wiki.failNextAlarmReservation();
+            return new Response(null, { status: 204 });
+          }
+          if (url.pathname === "/__socket-error") {
+            await wiki.disconnectWithError();
+            return new Response(null, { status: 204 });
+          }
           if (url.pathname === "/__subscriptions") return Response.json(await wiki.subscriptionState());
           if (url.pathname === "/__query") {
             try { return Response.json(await wiki.queryUnchecked(await request.json())); }
@@ -159,6 +171,35 @@ test(
       import { Wiki as BackendWiki } from ${JSON.stringify(resolve("apps/relay/src/wiki.ts"))};
       import { queryEvents } from ${JSON.stringify(resolve("apps/relay/src/query.ts"))};
       export class Wiki extends BackendWiki {
+        alarmRuns = 0;
+        alarmAttempts = 0;
+        async alarm() {
+          this.alarmAttempts++;
+          await super.alarm();
+          this.alarmRuns++;
+        }
+        async alarmState() {
+          return { scheduled: await this.ctx.storage.getAlarm(), runs: this.alarmRuns, attempts: this.alarmAttempts };
+        }
+        async triggerCleanup(failReservation) {
+          if (failReservation) this.failNextAlarmReservation(1);
+          await this.ctx.storage.setAlarm(Date.now());
+        }
+        failNextAlarmReservation(skip = 0) {
+          const original = this.ctx.storage.setAlarm;
+          this.ctx.storage.setAlarm = (...args) => {
+            if (skip-- > 0) return original.apply(this.ctx.storage, args);
+            this.ctx.storage.setAlarm = original;
+            throw new Error("Injected Alarm reservation failure");
+          };
+        }
+        disconnectWithError() {
+          for (const socket of this.ctx.getWebSockets()) {
+            const { id } = socket.deserializeAttachment();
+            const subscriptions = this.ctx.storage.kv.get("subscriptions:" + id) ?? [];
+            if (subscriptions.some(sub => sub.id === "socket-error")) this.webSocketError(socket);
+          }
+        }
         subscriptionState() {
           return Array.from(this.ctx.storage.kv.list({ prefix: "subscriptions:" }));
         }
@@ -197,6 +238,21 @@ test(
     const relay = server.getWorker("nostr-co-wiki-relay");
     const web = server.getWorker("nostr-co-wiki-web");
     const wiki = {
+      async alarmState() {
+        return (await web.fetch("/__alarm")).json();
+      },
+      async triggerCleanup(failReservation = false) {
+        const before = await this.alarmState();
+        await web.fetch(failReservation ? "/__alarm?fail" : "/__alarm", {
+          method: "POST",
+        });
+        for (let attempt = 0; attempt < 1000; attempt++) {
+          const state = await this.alarmState();
+          if (state.runs > before.runs) return state;
+          await delay(10);
+        }
+        assert.fail("Alarm handler did not complete");
+      },
       async subscriptionState() {
         return (await web.fetch("/__subscriptions")).json();
       },
@@ -261,6 +317,44 @@ test(
           ).status,
           404,
         );
+      },
+    );
+
+    await t.test(
+      "atomically saves subscriptions and reserves one Alarm without extending its deadline",
+      async () => {
+        const day = 24 * 60 * 60 * 1000;
+        assert.equal((await wiki.alarmState()).scheduled, null);
+        await web.fetch("/__fail-alarm", { method: "POST" });
+        client.send(["REQ", "alarm-failed", { limit: 0 }]);
+        assert.equal(
+          (await client.next((message) => message[0] === "CLOSED"))[1],
+          "alarm-failed",
+        );
+        assert.deepEqual(await wiki.subscriptionState(), []);
+        assert.equal((await wiki.alarmState()).scheduled, null);
+        const before = Date.now();
+        client.send(["REQ", "alarm-first", { kinds: [2818], limit: 0 }]);
+        await client.next((message) => message[0] === "EOSE");
+        const scheduled = (await wiki.alarmState()).scheduled;
+        assert.ok(scheduled >= before + day && scheduled <= Date.now() + day);
+        for (const id of ["alarm-first", "alarm-second", "alarm-third"])
+          client.send(["REQ", id, { kinds: [2818], limit: 0 }]);
+        for (let i = 0; i < 3; i++)
+          await client.next((message) => message[0] === "EOSE");
+        assert.equal((await wiki.alarmState()).scheduled, scheduled);
+        assert.deepEqual(
+          (await wiki.subscriptionState())[0][1].map((sub) => sub.id),
+          ["alarm-first", "alarm-second", "alarm-third"],
+        );
+        for (const id of ["alarm-first", "alarm-second", "alarm-third"])
+          client.send(["CLOSE", id]);
+        // A subsequent request is a barrier after all CLOSE messages.
+        client.send(["UNKNOWN"]);
+        await client.next((message) => message[0] === "NOTICE");
+        assert.deepEqual(await wiki.subscriptionState(), []);
+        // Let the one pending Alarm observe the empty state and stop.
+        assert.equal((await wiki.triggerCleanup()).scheduled, null);
       },
     );
 
@@ -934,6 +1028,26 @@ test(
     );
 
     await t.test(
+      "deletes subscriptions on WebSocket errors and sends an abnormal close",
+      async () => {
+        const watcher = await connection(relay, t);
+        watcher.send(["REQ", "socket-error", { limit: 0 }]);
+        await watcher.next((message) => message[0] === "EOSE");
+        const closed = new Promise((resolve) =>
+          watcher.socket.addEventListener("close", resolve, { once: true }),
+        );
+        await web.fetch("/__socket-error", { method: "POST" });
+        assert.equal((await closed).code, 1011);
+        assert.equal(
+          (await wiki.subscriptionState()).some(([, subs]) =>
+            subs.some((sub) => sub.id === "socket-error"),
+          ),
+          false,
+        );
+      },
+    );
+
+    await t.test(
       "searches with FTS5 trigram, field priorities, literal text, and Japanese",
       async () => {
         const fixtures = [
@@ -1099,7 +1213,13 @@ test(
           webSockets: "close",
         });
         assert.deepEqual(await wiki.getHistory("nostr"), before);
-        assert.deepEqual(await wiki.subscriptionState(), []);
+        const orphaned = await wiki.subscriptionState();
+        assert.ok(
+          orphaned.length > 0,
+          "constructor must leave subscription KV for the Alarm",
+        );
+        const scheduled = (await wiki.alarmState()).scheduled;
+        assert.ok(scheduled > Date.now());
         assert.deepEqual(
           await db.exec(
             "SELECT * FROM event_receipts WHERE revision_id = ?",
@@ -1111,6 +1231,43 @@ test(
         assert.ok((await query(after, { search: "日本語" })).length > 0);
         assert.match((await publish(after, first))[3], /^duplicate:/);
         assert.equal(await wiki.getArticle("ranking"), null);
+        const watcher = await connection(relay, t);
+        watcher.send(["REQ", "after-restart", { kinds: [2818], limit: 0 }]);
+        await watcher.next((message) => message[0] === "EOSE");
+        assert.equal((await wiki.alarmState()).scheduled, scheduled);
+        // Force a real Alarm dispatch now rather than waiting 24 hours.
+        // A failed rebooking rolls back orphan deletion; the runtime retries it.
+        const beforeCleanup = Date.now();
+        const next = await wiki.triggerCleanup(true);
+        assert.ok(next.attempts >= 2, "runtime must retry the failed Alarm");
+        const day = 24 * 60 * 60 * 1000;
+        assert.ok(
+          next.scheduled >= beforeCleanup + day &&
+            next.scheduled <= Date.now() + day,
+        );
+        assert.ok(
+          (await wiki.subscriptionState()).every(
+            ([key]) => !orphaned.some(([old]) => old === key),
+          ),
+        );
+        const event = revision("after-alarm");
+        assert.equal((await publish(after, event))[2], true);
+        assert.equal(
+          (
+            await watcher.next(
+              (message) =>
+                message[0] === "EVENT" && message[1] === "after-restart",
+            )
+          )[2].id,
+          event.id,
+        );
+        watcher.send(["CLOSE", "after-restart"]);
+        // CLOSE is immediate; it need not scan KV or cancel the scheduled Alarm.
+        watcher.send(["UNKNOWN"]);
+        await watcher.next((message) => message[0] === "NOTICE");
+        assert.deepEqual(await wiki.subscriptionState(), []);
+        assert.equal((await wiki.alarmState()).scheduled, next.scheduled);
+        assert.equal((await wiki.triggerCleanup()).scheduled, null);
       },
     );
   },
