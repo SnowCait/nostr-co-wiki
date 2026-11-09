@@ -1,0 +1,101 @@
+import type { Event } from "nostr-tools/pure";
+import {
+  bytes,
+  matches,
+  newestFirst,
+  searchRank,
+  searchText,
+  type Filter,
+} from "./protocol";
+
+export function getArticle(sql: SqlStorage, d: string): Event | null {
+  return (
+    sql
+      .exec<{ data: string }>(
+        `SELECT e.data FROM articles a JOIN events e ON e.id = a.published_event_id
+     WHERE a.d = ? AND a.is_published = 1`,
+        d,
+      )
+      .toArray()
+      .map((row) => JSON.parse(row.data) as Event)[0] ?? null
+  );
+}
+
+export function getHistory(
+  sql: SqlStorage,
+  d: string,
+): { commit: Event; revision: Event | null }[] {
+  return sql
+    .exec<{ commit_data: string; revision_data: string | null }>(
+      `SELECT c.data AS commit_data, r.data AS revision_data
+     FROM articles a JOIN events c ON c.article_d = a.d AND c.kind = 3818
+     LEFT JOIN events r ON r.id = c.ref_event_id
+     WHERE a.d = ? AND a.is_published = 1 ORDER BY c.seq`,
+      d,
+    )
+    .toArray()
+    .map((row) => ({
+      commit: JSON.parse(row.commit_data) as Event,
+      revision:
+        row.revision_data === null
+          ? null
+          : (JSON.parse(row.revision_data) as Event),
+    }));
+}
+
+export function queryEvents(sql: SqlStorage, filters: Filter[]): Event[] {
+  const results = new Map<string, Event>();
+  for (const filter of filters) {
+    if (filter.limit === 0) continue;
+    const query =
+      filter.search === undefined ? undefined : searchText(filter.search);
+    if (query !== undefined && [...query].length < 3) continue;
+    let statement =
+      query === undefined
+        ? `SELECT e.data FROM events e JOIN articles a ON a.d = e.article_d WHERE a.is_published = 1`
+        : `SELECT e.data FROM article_fts f JOIN articles a ON a.id = f.rowid
+         JOIN events e ON e.id = a.published_event_id WHERE a.is_published = 1 AND article_fts MATCH ?`;
+    const bindings: SqlStorageValue[] =
+      query === undefined ? [] : [`"${query.replaceAll('"', '""')}"`];
+    const constrain = (column: string, values: SqlStorageValue[]) => {
+      statement += ` AND ${column} IN (${values.map(() => "?").join(",")})`;
+      bindings.push(...values);
+    };
+    if (filter.kinds) constrain("e.kind", filter.kinds);
+    if (filter.ids)
+      constrain(
+        "e.id",
+        filter.ids.map((id) => bytes(id).buffer),
+      );
+    if (filter.authors)
+      constrain(
+        "e.pubkey",
+        filter.authors.map((author) => bytes(author).buffer),
+      );
+    if (filter.since !== undefined) {
+      statement += " AND e.created_at >= ?";
+      bindings.push(filter.since);
+    }
+    if (filter.until !== undefined) {
+      statement += " AND e.created_at <= ?";
+      bindings.push(filter.until);
+    }
+    const rows = sql.exec<{ data: string }>(statement, ...bindings);
+    const events = rows
+      .toArray()
+      .map((row) => JSON.parse(row.data) as Event)
+      .filter((event) => matches(event, filter));
+    events.sort(
+      query === undefined
+        ? newestFirst
+        : (a, b) =>
+            searchRank(a, query) - searchRank(b, query) || newestFirst(a, b),
+    );
+    for (const event of events.slice(0, filter.limit))
+      results.set(event.id, event);
+  }
+  const events = [...results.values()];
+  return filters.every((filter) => filter.search === undefined)
+    ? events.sort(newestFirst)
+    : events;
+}
