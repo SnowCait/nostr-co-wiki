@@ -44,7 +44,7 @@ export class Wiki extends DurableObject<WikiEnvironment> {
     ) {
       return new Response("Not Found", { status: 404 });
     }
-    const ip = request.headers.get("X-Wiki-IP");
+    const ip = request.headers.get("CF-Connecting-IP");
     if (!ip) return new Response("Missing connection address", { status: 400 });
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);

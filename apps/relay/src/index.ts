@@ -8,8 +8,6 @@ export default {
     ) {
       return new Response("Not Found", { status: 404 });
     }
-    const headers = new Headers(request.headers);
-    headers.set("X-Wiki-IP", request.headers.get("CF-Connecting-IP") ?? "");
-    return env.WIKI.getByName("wiki").fetch(new Request(request, { headers }));
+    return env.WIKI.getByName("wiki").fetch(request);
   },
 } satisfies ExportedHandler<Cloudflare.Env>;

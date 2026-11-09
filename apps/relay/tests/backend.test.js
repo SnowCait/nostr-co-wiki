@@ -39,7 +39,6 @@ async function connection(worker, t) {
     headers: {
       Upgrade: "websocket",
       "CF-Connecting-IP": "203.0.113.9",
-      "X-Wiki-IP": "spoofed",
     },
   });
   assert.equal(response.status, 101);
