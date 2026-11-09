@@ -34,7 +34,7 @@ interface WikiEnvironment {
 export class Wiki extends DurableObject<WikiEnvironment> {
   constructor(ctx: DurableObjectState, env: WikiEnvironment) {
     super(ctx, env);
-    ctx.storage.transactionSync(() => ctx.storage.sql.exec(schema));
+    ctx.storage.sql.exec(schema);
   }
 
   fetch(request: Request): Response {
@@ -262,7 +262,7 @@ export class Wiki extends DurableObject<WikiEnvironment> {
       const previous = article ? this.#event(article.head_commit_id) : null;
       if (previous?.id !== base)
         throw new Error(
-          "blocked: edit conflict: base Commit does not match current article",
+          "blocked: edit conflict (base Commit does not match current article)",
         );
       const published = article?.published_event_id
         ? this.#event(article.published_event_id)
