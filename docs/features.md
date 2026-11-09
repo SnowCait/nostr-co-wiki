@@ -49,40 +49,31 @@ The `/wiki/` prefix is fixed in the initial implementation.
 
 ## Article Creation
 
-Article creation uses a two-step flow.
+Article creation uses a single screen containing:
 
-### Step 1: Title and Article Identifier
-
-1. The user enters an article title.
-2. The application generates `d` from the title using NIP-54 normalization rules.
-3. The generated article URL is displayed.
-4. The application checks whether the identifier is already in use.
-5. If an existing published article uses the identifier, the user is directed to that article.
-6. If the identifier is available, the user may proceed to the editor.
-
-The title is required.
-
-The generated `d` cannot be edited manually. No automatic numeric suffix or identifier reservation mechanism is introduced.
-
-An availability check does not reserve the identifier. The Relay remains responsible for validating article creation when the Revision is submitted.
-
-### Step 2: Content Editing
-
-The editor provides:
-
+- A required title input.
+- The `d` identifier generated from the title using NIP-54 normalization rules and the resulting article URL.
+- The result of the duplicate identifier check.
 - A Djot source editor.
 - An HTML preview.
-- A title.
 - An optional summary.
 - An optional edit summary.
+- A submission action.
 
-A WYSIWYG editor is not included.
+The generated `d` cannot be edited manually. Changing the title regenerates `d` and checks for duplicates again. Changing the title does not discard entered content, summary, or edit summary.
 
-The user signs the new Revision using NIP-07 and submits it through the dedicated Relay.
+If a published article uses the identifier, the screen displays a link to that article and does not allow submission. If an unpublished article uses the identifier, the screen indicates that the URL is unavailable and does not allow submission; it does not show the unpublished article's content or an administrative link. The user may continue editing content while an identifier is duplicated.
+
+An availability check does not reserve the identifier. The Relay performs the final duplicate check when the user signs the new Revision using NIP-07 and submits it through the dedicated Relay. No automatic numeric suffix or identifier reservation mechanism is introduced. A WYSIWYG editor is not included.
 
 ### Acceptance Criteria
 
-- Duplicate article identifiers are normally detected before the user starts writing content.
+- Title, generated identifier and URL, duplicate check, editor, preview, summary, edit summary, and submission are available on one screen.
+- Changing the title regenerates the identifier and rechecks for duplicates without discarding entered content, summary, or edit summary.
+- A duplicate published identifier links to the existing article and prevents submission.
+- A duplicate unpublished identifier is reported as unavailable without exposing its content or an administrative link, and prevents submission.
+- Users can continue editing content while an identifier is duplicated.
+- The Relay performs the final duplicate check at submission time.
 - A valid new article can be created through the Web UI.
 - The submitted article becomes available at `/wiki/{d}` after successful acceptance and publication.
 - If another user creates the same article before submission, the resulting conflict is reported.
@@ -106,6 +97,8 @@ Revisions are signed through NIP-07 and sent to the Relay.
 - Accepted edits update the published article.
 - The article URL remains unchanged when its title changes.
 - A conflicting edit is reported to the user.
+- The user's entered edits are preserved when a conflict occurs.
+- Users can inspect the latest article and manually adjust their changes.
 - Automatic merging is not performed.
 - A rejected Revision does not silently overwrite the current article.
 
@@ -153,6 +146,8 @@ Restoration creates a new Revision containing the selected historical content an
 
 The user signs and submits the new Revision using the normal editing process.
 
+If restoration conflicts with a newer Commit, the user is notified, the restoration content is preserved, and the user can inspect the latest article and manually adjust the content before resubmitting. Automatic merging is not performed.
+
 Previous Revisions and Commits are not modified or removed.
 
 ### Acceptance Criteria
@@ -196,20 +191,23 @@ Wiki administrators can unpublish and republish articles.
 
 Administrative actions use NIP-98 authentication.
 
-The Web UI provides administration controls on article pages and allows authorized administrators to access unpublished articles for republication.
+An administrator-only dashboard is provided on a subdomain separate from the public site. The specific subdomain name and deployment configuration are not defined here. The public site does not contain administrative controls or links to the dashboard.
 
-A separate administration dashboard is not included.
+The dashboard lists published and unpublished articles and shows each article's publication state. It allows authorized administrators to unpublish published articles and republish unpublished articles. Administrators can access unpublished articles through the dashboard. No custom administrative private-key storage is introduced.
 
 Administration permissions apply to the entire Wiki.
 
 ### Acceptance Criteria
 
 - Authorized administrators can unpublish a published article.
+- The administrator-only dashboard lists published and unpublished articles and shows their publication state.
+- Authorized administrators can access unpublished articles through the dashboard.
 - Unpublished articles are removed from public reading, search results, and public relay distribution as specified in the protocol.
-- Authorized administrators can access unpublished articles and republish them.
+- Authorized administrators can republish unpublished articles.
 - Republishing makes the latest confirmed article state available again.
 - Administrative actions do not create new Revisions or Commits.
-- Administration controls are not displayed to non-administrators.
+- The public site contains no administrative controls or dashboard links.
+- Non-administrators cannot retrieve unpublished information or perform administrative actions.
 - Unauthorized administrative requests are rejected.
 
 ## Initial Exclusions
@@ -223,7 +221,6 @@ The initial implementation does not include:
 - Custom private-key storage or login.
 - NIP-46 signing.
 - Advanced search filters.
-- A separate administration dashboard.
 - NIP-09 or NIP-62 support.
 
 Future features are not implemented speculatively.
