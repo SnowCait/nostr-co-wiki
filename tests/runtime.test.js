@@ -5,9 +5,10 @@ import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { test } from "node:test";
+import { nsecEncode } from "nostr-tools/nip19";
 
 test(
-  "Workers serve SSR and connect to the Relay-owned SQLite Durable Object",
+  "Single Worker serves SSR and binds its SQLite Wiki Durable Object",
   { timeout: 90000 },
   async (t) => {
     const directory = await mkdtemp(join(tmpdir(), "nostr-co-wiki-"));
@@ -35,40 +36,26 @@ test(
         await rm(directory, { recursive: true, force: true });
       }
     });
-    const web = JSON.parse(await readFile("apps/web/wrangler.json", "utf8"));
-    const relay = JSON.parse(
-      await readFile("apps/relay/wrangler.json", "utf8"),
-    );
-    assert.deepEqual(relay.exports.Wiki, {
+    const config = JSON.parse(await readFile("wrangler.json", "utf8"));
+    assert.deepEqual(config.exports.Wiki, {
       type: "durable-object",
       storage: "sqlite",
     });
-    // Only the test entry point exposes binding probes; the application has no debug routes.
-    await writeFile(
-      join(directory, "worker.js"),
-      `
-    import web from ${JSON.stringify(resolve("apps/web/.svelte-kit/cloudflare/_worker.js"))};
-    export default {
-      async fetch(request, env, ctx) {
-        if (new URL(request.url).pathname === '/__bindings') {
-          const object = await env.WIKI.getByName('wiki').fetch('https://wiki.invalid/');
-          return Response.json({ object: object.status });
-        }
-        return web.fetch(request, env, ctx);
-      }
-    };
-  `,
-    );
+    assert.equal(config.durable_objects.bindings[0].script_name, undefined);
     await writeFile(
       join(directory, "wrangler.json"),
       JSON.stringify({
-        ...web,
-        main: join(directory, "worker.js"),
+        ...config,
+        main: resolve("worker.js"),
         assets: {
-          ...web.assets,
-          directory: resolve("apps/web/.svelte-kit/cloudflare"),
+          ...config.assets,
+          directory: resolve(".svelte-kit/cloudflare"),
         },
       }),
+    );
+    await writeFile(
+      join(directory, ".dev.vars"),
+      "WIKI_PRIVATE_KEY=" + nsecEncode(new Uint8Array(32).fill(9)) + "\n",
     );
     let output = "";
     child = spawn(
@@ -77,8 +64,6 @@ test(
         "dev",
         "-c",
         join(directory, "wrangler.json"),
-        "-c",
-        resolve("apps/relay/wrangler.json"),
         "--port",
         "18787",
         "--persist-to",
@@ -124,8 +109,6 @@ test(
     assert.equal(response.status, 200, output);
     const html = await response.text();
     assert.match(html, /<h1>NostrCoWiki<\/h1>/);
-    const bindings = await fetch("http://localhost:18787/__bindings");
-    assert.equal(bindings.status, 200, await bindings.clone().text());
-    assert.deepEqual(await bindings.json(), { object: 404 });
+    assert.equal((await fetch("http://localhost:18787/relay")).status, 426);
   },
 );
