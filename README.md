@@ -1,5 +1,14 @@
 # NostrCoWiki
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/SnowCait/nostr-co-wiki)
+
+Deploy to your own Cloudflare account. Enter a Wiki signing private key in
+`nsec1...` format for the required `WIKI_PRIVATE_KEY` Secret. To use administration,
+set the optional `ADMIN_PUBLIC_KEY` runtime variable to the administrator’s
+`npub1...` public key in the Worker’s Cloudflare Dashboard settings after the
+first deployment. A first deployment creates a new Wiki Durable Object; data from
+an existing deployment is not transferred.
+
 Requires Node.js 24 or later and npm. A single Cloudflare Worker named
 `nostr-co-wiki` serves SvelteKit, the Nostr Relay, and its SQLite-backed Wiki
 Durable Object.
