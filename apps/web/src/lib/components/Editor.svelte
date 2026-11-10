@@ -3,6 +3,7 @@
   import { resolve } from "$app/paths";
   import { onMount, untrack } from "svelte";
   import { goto } from "$app/navigation";
+  import { waitNostr } from "nip07-awaiter";
   import { normalizeIdentifier } from "@nostr-co-wiki/protocol/identifier";
   import { articlePath, tag, type ArticleResponse } from "#lib/article.ts";
   import { createRevision, submitRevision } from "#lib/submission.ts";
@@ -42,7 +43,19 @@
   let latest = $state<Event | null>(null);
   onMount(() => {
     origin = window.location.origin;
-    signingAvailable = !!window.nostr;
+    const controller = new AbortController();
+    waitNostr(0, { signal: controller.signal })
+      .then((nostr) => {
+        if (!controller.signal.aborted && nostr) {
+          signingAvailable = true;
+        }
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          console.error("Unable to detect the signing extension", error);
+        }
+      });
+    return () => controller.abort();
   });
   $effect(() => {
     const identifier = d;
@@ -186,8 +199,8 @@
     signing.
   </p>{/if}
 {#if !signingAvailable}<p role="status">
-    A NIP-07 compatible signing extension is required to create or edit
-    articles. Reading remains available.
+    Waiting for a NIP-07 compatible signing extension. One is required to create
+    or edit articles. Reading remains available.
   </p>{/if}
 <form onsubmit={submit}>
   <fieldset disabled={busy || !!acceptedId}>
