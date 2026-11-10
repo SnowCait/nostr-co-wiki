@@ -5,6 +5,5 @@
   "compatibility_date": "2026-11-09",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {"directory": ".svelte-kit/cloudflare", "binding": "ASSETS"},
-  "durable_objects": {"bindings": [{"name": "WIKI", "class_name": "Wiki", "script_name": "nostr-co-wiki-relay"}]},
-  "vars": {"RELAY_URL": "ws://localhost:8788/"}
+  "durable_objects": {"bindings": [{"name": "WIKI", "class_name": "Wiki", "script_name": "nostr-co-wiki-relay"}]}
 }

@@ -14,8 +14,8 @@ export async function publicArticle(d: string) {
   return article;
 }
 export function relayUrl(): string {
-  const configured = env.RELAY_URL;
-  if (!configured || !/^wss?:\/\//.test(configured)) {
+  const configured = "RELAY_URL" in env ? env.RELAY_URL : undefined;
+  if (typeof configured !== "string" || !/^wss?:\/\//.test(configured)) {
     error(503, "The Relay URL is not configured.");
   }
   return configured;

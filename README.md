@@ -7,14 +7,11 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:8787. This builds the SvelteKit Web Worker and starts it
-alongside the Relay Worker in one Wrangler process. Restart the command after
-changing Web code. Both Workers bind to the same Relay-owned SQLite Wiki Durable
-Object. No Cloudflare account is required for local development.
-
-For SvelteKit live reload, run `npm run dev:web`. The standalone Relay can be
-started with `npm run dev:relay`. Use the combined `npm run dev` command to
-verify Worker bindings together.
+Open http://localhost:8787. This builds the SvelteKit Web Worker, then starts
+Web and Relay in separate Wrangler processes. The Relay listens at
+`ws://localhost:8788/`. Wrangler's local registry connects the Web binding to the
+Relay-owned SQLite Wiki Durable Object. Ctrl+C stops both processes. Restart the
+command after changing Web code. No Cloudflare account is required for local development.
 
 ```sh
 npm exec playwright -- install chromium
@@ -33,8 +30,9 @@ local Workers. Its connection probes exist only in the test entry point.
 
 The Durable Object uses Cloudflare's declarative
 [class exports](https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/)
-with SQLite storage. Combined development uses the official
-[multiple-Worker workflow](https://developers.cloudflare.com/workers/local-development/multi-workers/).
+with SQLite storage. Local development uses the official
+[multiple-dev-commands workflow](https://developers.cloudflare.com/workers/local-development/multi-workers/#multiple-dev-commands)
+so that both Workers have browser-accessible endpoints.
 
 The Relay accepts NIP-01 WebSocket connections at `/`. To submit Revisions locally,
 set the Wiki signing key in `apps/relay/.dev.vars` (an ignored file):
@@ -43,8 +41,8 @@ set the Wiki signing key in `apps/relay/.dev.vars` (an ignored file):
 WIKI_PRIVATE_KEY=<the Wiki's nsec1... private key>
 ```
 
-Run `npm run dev:relay` and connect to `ws://localhost:8787/`. Backend tests inject
-their own test key and require no credentials.
+After this required key setup, `npm run dev` starts the full public Wiki. Tests
+inject fixture keys and require no credentials.
 
 The Web Worker's `WIKI` binding accesses the same object through
 `env.WIKI.getByName("wiki")`. Its `getArticle(d)` method returns the latest public
@@ -63,10 +61,11 @@ signing extension; reading and search do not. Editor previews and server-rendere
 articles use the same Djot renderer and HTML sanitizer. A successful Relay response
 confirms acceptance; the editor checks the published Article before navigating.
 
-In combined development, the Web Worker is at `http://localhost:8787` and the
-Relay WebSocket endpoint is `ws://localhost:8788/`. The Web Worker's public
-`RELAY_URL` variable in `apps/web/wrangler.json` supplies the browser connection
-URL. For deployment, set it to the deployed Relay's `wss://` URL, for example with
+The development startup injects `RELAY_URL:ws://localhost:8788/` into the Web
+Worker through Wrangler's `--var` option. The Wrangler configuration contains no
+default Relay URL, and an unset or invalid value produces a configuration error
+on creation/editing pages; it never falls back to localhost. For deployment,
+explicitly set `RELAY_URL` to the deployed Relay's `wss://` URL, for example with
 `wrangler deploy --config apps/web/wrangler.json --var RELAY_URL:wss://relay.example.com/`.
 Keep `WIKI_PRIVATE_KEY` exclusively in the Relay Worker Secret. No Wiki private key
 is sent to the Web Worker or browser.
@@ -83,3 +82,7 @@ cannot run the bundled browser, point `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` at a
 compatible installed Chromium when running `npm test`. CI installs its supported
 Chromium and system dependencies. Tests use fixture signing keys and no external
 signing service or Cloudflare credentials.
+
+The development-startup test runs the actual `npm run dev` command in an isolated
+workspace and checks browser posting, shared Article state, SSR, and SIGINT
+shutdown. Stop development servers on ports 8787 and 8788 before running `npm test`.

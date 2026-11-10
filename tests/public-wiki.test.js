@@ -99,7 +99,10 @@ test(
     const { url } = await server.listen();
     const base = url.origin;
     const relayUrl = base.replace(/^http/, "ws") + "/__relay";
-    options.workers[0].config.vars.RELAY_URL = relayUrl;
+    const missingRelay = await fetch(base + "/new");
+    assert.equal(missingRelay.status, 503);
+    assert.match(await missingRelay.text(), /The Relay URL is not configured/);
+    options.workers[0].config.vars = { RELAY_URL: relayUrl };
     await server.update(options);
     const db = await server
       .getWorker("nostr-co-wiki-relay")
