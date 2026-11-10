@@ -141,7 +141,7 @@ test(
             return Response.json(await wiki.alarmState());
           }
           if (url.pathname === "/__fail-alarm") {
-            await wiki.failNextAlarmReservation();
+            await wiki.failNextAlarmReservation(0, url.searchParams.get("method") ?? "setAlarm");
             return new Response(null, { status: 204 });
           }
           if (url.pathname === "/__socket-error") {
@@ -172,24 +172,28 @@ test(
       import { queryEvents } from ${JSON.stringify(resolve("apps/relay/src/query.ts"))};
       export class Wiki extends BackendWiki {
         alarmRuns = 0;
-        alarmAttempts = 0;
+        failedCleanupKeys = null;
         async alarm() {
-          this.alarmAttempts++;
-          await super.alarm();
-          this.alarmRuns++;
+          try {
+            await super.alarm();
+            this.alarmRuns++;
+          } catch (error) {
+            this.failedCleanupKeys = this.subscriptionState().map(([key]) => key);
+            throw error;
+          }
         }
         async alarmState() {
-          return { scheduled: await this.ctx.storage.getAlarm(), runs: this.alarmRuns, attempts: this.alarmAttempts };
+          return { scheduled: await this.ctx.storage.getAlarm(), runs: this.alarmRuns, failedCleanupKeys: this.failedCleanupKeys };
         }
         async triggerCleanup(failReservation) {
           if (failReservation) this.failNextAlarmReservation(1);
           await this.ctx.storage.setAlarm(Date.now());
         }
-        failNextAlarmReservation(skip = 0) {
-          const original = this.ctx.storage.setAlarm;
-          this.ctx.storage.setAlarm = (...args) => {
+        failNextAlarmReservation(skip = 0, method = "setAlarm") {
+          const original = this.ctx.storage[method];
+          this.ctx.storage[method] = (...args) => {
             if (skip-- > 0) return original.apply(this.ctx.storage, args);
-            this.ctx.storage.setAlarm = original;
+            this.ctx.storage[method] = original;
             throw new Error("Injected Alarm reservation failure");
           };
         }
@@ -321,18 +325,26 @@ test(
     );
 
     await t.test(
-      "atomically saves subscriptions and reserves one Alarm without extending its deadline",
+      "keeps subscriptions when Alarm reservation fails and does not extend an existing deadline",
       async () => {
         const day = 24 * 60 * 60 * 1000;
         assert.equal((await wiki.alarmState()).scheduled, null);
-        await web.fetch("/__fail-alarm", { method: "POST" });
-        client.send(["REQ", "alarm-failed", { limit: 0 }]);
-        assert.equal(
-          (await client.next((message) => message[0] === "CLOSED"))[1],
-          "alarm-failed",
-        );
-        assert.deepEqual(await wiki.subscriptionState(), []);
-        assert.equal((await wiki.alarmState()).scheduled, null);
+        const failedIds = [];
+        for (const method of ["getAlarm", "setAlarm"]) {
+          await web.fetch(`/__fail-alarm?method=${method}`, { method: "POST" });
+          const id = `alarm-failed-${method}`;
+          client.send(["REQ", id, { kinds: [2818], limit: 0 }]);
+          assert.equal(
+            (await client.next((message) => message[0] === "EOSE"))[1],
+            id,
+          );
+          failedIds.push(id);
+          assert.deepEqual(
+            (await wiki.subscriptionState())[0][1].map((sub) => sub.id),
+            failedIds,
+          );
+          assert.equal((await wiki.alarmState()).scheduled, null);
+        }
         const before = Date.now();
         client.send(["REQ", "alarm-first", { kinds: [2818], limit: 0 }]);
         await client.next((message) => message[0] === "EOSE");
@@ -345,9 +357,14 @@ test(
         assert.equal((await wiki.alarmState()).scheduled, scheduled);
         assert.deepEqual(
           (await wiki.subscriptionState())[0][1].map((sub) => sub.id),
-          ["alarm-first", "alarm-second", "alarm-third"],
+          [...failedIds, "alarm-first", "alarm-second", "alarm-third"],
         );
-        for (const id of ["alarm-first", "alarm-second", "alarm-third"])
+        for (const id of [
+          ...failedIds,
+          "alarm-first",
+          "alarm-second",
+          "alarm-third",
+        ])
           client.send(["CLOSE", id]);
         // A subsequent request is a barrier after all CLOSE messages.
         client.send(["UNKNOWN"]);
@@ -1236,10 +1253,24 @@ test(
         await watcher.next((message) => message[0] === "EOSE");
         assert.equal((await wiki.alarmState()).scheduled, scheduled);
         // Force a real Alarm dispatch now rather than waiting 24 hours.
-        // A failed rebooking rolls back orphan deletion; the runtime retries it.
+        // A failed rebooking preserves orphan deletion; the runtime retries it.
         const beforeCleanup = Date.now();
         const next = await wiki.triggerCleanup(true);
-        assert.ok(next.attempts >= 2, "runtime must retry the failed Alarm");
+        assert.notEqual(
+          next.failedCleanupKeys,
+          null,
+          "Alarm rebooking must have failed before the runtime retry",
+        );
+        assert.ok(
+          next.failedCleanupKeys.length > 0,
+          "active subscriptions must remain",
+        );
+        assert.ok(
+          next.failedCleanupKeys.every(
+            (key) => !orphaned.some(([old]) => old === key),
+          ),
+          "successful deletion must survive rebooking failure",
+        );
         const day = 24 * 60 * 60 * 1000;
         assert.ok(
           next.scheduled >= beforeCleanup + day &&

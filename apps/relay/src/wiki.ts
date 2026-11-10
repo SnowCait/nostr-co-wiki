@@ -118,15 +118,17 @@ export class Wiki extends DurableObject<WikiEnvironment> {
         const filters = message.slice(2).map(parseFilter);
         const events = queryEvents(this.ctx.storage.sql, filters);
         try {
-          await this.ctx.storage.transaction(async () => {
-            this.ctx.storage.kv.put(key, [...subscriptions, { id, filters }]);
-            if ((await this.ctx.storage.getAlarm()) === null)
-              await this.ctx.storage.setAlarm(
-                Date.now() + subscriptionCleanupInterval,
-              );
-          });
+          this.ctx.storage.kv.put(key, [...subscriptions, { id, filters }]);
         } catch {
           throw new Error("error: unable to store subscription state");
+        }
+        try {
+          if ((await this.ctx.storage.getAlarm()) === null)
+            await this.ctx.storage.setAlarm(
+              Date.now() + subscriptionCleanupInterval,
+            );
+        } catch (error) {
+          console.error("Unable to schedule subscription cleanup Alarm", error);
         }
         for (const event of events) this.#send(socket, ["EVENT", id, event]);
         this.#send(socket, ["EOSE", id]);
@@ -146,25 +148,21 @@ export class Wiki extends DurableObject<WikiEnvironment> {
   }
 
   async alarm(): Promise<void> {
-    await this.ctx.storage.transaction(async () => {
-      const connections = new Set(
-        this.ctx.getWebSockets().map((socket) => {
-          const connection: Connection = socket.deserializeAttachment();
-          return `subscriptions:${connection.id}`;
-        }),
-      );
-      let remaining = false;
-      for (const [key] of this.ctx.storage.kv.list({
-        prefix: "subscriptions:",
-      })) {
-        if (connections.has(key)) remaining = true;
-        else this.ctx.storage.kv.delete(key);
-      }
-      if (remaining)
-        await this.ctx.storage.setAlarm(
-          Date.now() + subscriptionCleanupInterval,
-        );
-    });
+    const connections = new Set(
+      this.ctx.getWebSockets().map((socket) => {
+        const connection: Connection = socket.deserializeAttachment();
+        return `subscriptions:${connection.id}`;
+      }),
+    );
+    let remaining = false;
+    for (const [key] of this.ctx.storage.kv.list({
+      prefix: "subscriptions:",
+    })) {
+      if (connections.has(key)) remaining = true;
+      else this.ctx.storage.kv.delete(key);
+    }
+    if (remaining)
+      await this.ctx.storage.setAlarm(Date.now() + subscriptionCleanupInterval);
   }
 
   webSocketClose(socket: WebSocket): void {
