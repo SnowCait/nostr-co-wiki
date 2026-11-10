@@ -1,8 +1,9 @@
-import type { WikiEvent } from "@nostr-co-wiki/protocol/event";
 import { decode } from "nostr-tools/nip19";
 import { getPublicKey } from "nostr-tools/pure";
 import { DurableObject } from "cloudflare:workers";
 import type { Event } from "nostr-tools/pure";
+
+type WikiEvent = Omit<Event, symbol>;
 import type { Filter } from "nostr-tools/filter";
 import { acceptRevision } from "./revision";
 import { getArticle, getArticleStatus, getHistory, queryEvents } from "./query";
