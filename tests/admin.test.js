@@ -189,7 +189,8 @@ export default {fetch(request, env, ctx) {
       200,
     );
     assert.equal(
-      (await (await call("GET", "?d=administration")).json()).article.content,
+      (await (await call()).json()).find((item) => item.d === "administration")
+        .article.content,
       event.content,
     );
     assert.equal(

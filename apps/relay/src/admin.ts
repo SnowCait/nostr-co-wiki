@@ -64,13 +64,11 @@ export async function administer(
   if (url.pathname !== "/api/admin/articles") {
     return new Response("Not Found", { status: 404 });
   }
-  const d = url.searchParams.get("d");
   const sql = storage.sql;
   if (request.method === "GET") {
     const rows = sql
-      .exec<{ id: number; d: string; is_published: number; data: string }>(
-        `SELECT a.id, a.d, a.is_published, e.data FROM articles a JOIN events e ON e.id = a.published_event_id ${d === null ? "" : "WHERE a.d = ?"} ORDER BY e.created_at DESC, a.d`,
-        ...(d === null ? [] : [d]),
+      .exec<{ d: string; is_published: number; data: string }>(
+        "SELECT a.d, a.is_published, e.data FROM articles a JOIN events e ON e.id = a.published_event_id ORDER BY e.created_at DESC, a.d",
       )
       .toArray();
     const result = rows.map((row) => ({
@@ -78,16 +76,12 @@ export async function administer(
       published: row.is_published === 1,
       article: JSON.parse(row.data) as Event,
     }));
-    if (d !== null) {
-      return result[0]
-        ? Response.json(result[0])
-        : new Response("Not Found", { status: 404 });
-    }
     return Response.json(result);
   }
   if (request.method !== "PUT") {
     return new Response("Method Not Allowed", { status: 405 });
   }
+  const d = url.searchParams.get("d");
   if (d === null) {
     return Response.json(
       { error: "Expected article identifier." },
