@@ -244,8 +244,12 @@ export default {fetch(request, env, ctx) {
         signEvent: (event) => globalThis.signAdmin(event),
       };
     });
+    let adminGetRequests = 0;
     await page.route("https://relay.test/**", async (route) => {
       const req = route.request();
+      if (req.method() === "GET") {
+        adminGetRequests++;
+      }
       const response = await worker().fetch(req.url(), {
         method: req.method(),
         headers: req.headers(),
@@ -261,8 +265,10 @@ export default {fetch(request, env, ctx) {
     await page.getByRole("button", { name: "Load articles" }).click();
     await page.getByRole("button", { name: "Unpublish", exact: true }).click();
     await page.getByText("Article unpublished.", { exact: true }).waitFor();
+    const getsBeforeView = adminGetRequests;
     await page.getByRole("button", { name: "View content" }).click();
     await page.getByText(event.content, { exact: true }).waitFor();
+    assert.equal(adminGetRequests, getsBeforeView);
     await page.getByRole("button", { name: "Republish", exact: true }).click();
     await page.getByText("Article republished.", { exact: true }).waitFor();
     await page.evaluate(() => {

@@ -90,18 +90,6 @@
       busy = false;
     }
   }
-  async function inspect(d: string) {
-    busy = true;
-    try {
-      selected = (await request<{ article: Event }>(d)).article;
-    } catch (error) {
-      selected = null;
-      notice =
-        error instanceof Error ? error.message : "Unable to load article.";
-    } finally {
-      busy = false;
-    }
-  }
 </script>
 
 <h1>Manage articles</h1>
@@ -120,7 +108,7 @@
         <p>{item.published ? "Published" : "Unpublished"}</p>
         <button disabled={busy} onclick={() => change(item.d, !item.published)}
           >{item.published ? "Unpublish" : "Republish"}</button
-        ><button disabled={busy} onclick={() => inspect(item.d)}
+        ><button disabled={busy} onclick={() => (selected = item.article)}
           >View content</button
         >
       </li>{/each}
