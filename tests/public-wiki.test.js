@@ -151,16 +151,47 @@ test(
     );
     assert.match(
       await page.content(),
-      /NIP-07 compatible signing extension is required/,
+      /Waiting for a NIP-07 compatible signing extension/,
+    );
+    await page
+      .getByText("This identifier is available.", { exact: false })
+      .waitFor();
+    assert.equal(
+      await page
+        .getByRole("button", { name: "Sign and submit Revision" })
+        .isDisabled(),
+      true,
+    );
+    await page.getByRole("link", { name: "NostrCoWiki" }).first().click();
+    await page.getByRole("link", { name: "Create article" }).first().click();
+    await page.getByLabel("Title (required)").fill("Draft");
+    await page
+      .getByText("This identifier is available.", { exact: false })
+      .waitFor();
+    await page.waitForTimeout(3200);
+    assert.equal(
+      await page
+        .getByRole("button", { name: "Sign and submit Revision" })
+        .isDisabled(),
+      true,
     );
     await page.exposeFunction("signForTest", signer.signEvent);
+    await page.evaluate(() => {
+      globalThis.nostr = {
+        getPublicKey: async () => "",
+        signEvent: (event) => globalThis.signForTest(event),
+      };
+    });
+    await page.waitForFunction(
+      () =>
+        globalThis.document.querySelector("form button")?.disabled === false,
+    );
     await page.addInitScript(() => {
       globalThis.nostr = {
         getPublicKey: async () => "",
         signEvent: (event) => globalThis.signForTest(event),
       };
     });
-    await page.reload();
     await page.getByLabel("Title (required)").fill("日本語 Article");
     await page.getByLabel("Djot source").fill("First source\n\n[Other][]");
     await page
