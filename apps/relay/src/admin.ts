@@ -61,7 +61,7 @@ export async function administer(
     );
   }
   const url = new URL(request.url);
-  if (url.pathname !== "/admin/articles") {
+  if (url.pathname !== "/api/admin/articles") {
     return new Response("Not Found", { status: 404 });
   }
   const d = url.searchParams.get("d");

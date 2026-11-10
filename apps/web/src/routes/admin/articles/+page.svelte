@@ -5,7 +5,6 @@
   import { getToken } from "nostr-tools/nip98";
   import type { Event } from "nostr-tools/pure";
   import { title } from "#lib/article.ts";
-  let { data } = $props();
   let signingAvailable = $state(false);
   let articles = $state<{ d: string; published: boolean; article: Event }[]>(
     [],
@@ -29,7 +28,7 @@
     if (!signer) {
       throw new Error("A NIP-07 signing extension is required.");
     }
-    const url = new URL(data.apiUrl);
+    const url = new URL("/api/admin/articles", window.location.origin);
     if (d !== undefined) {
       url.searchParams.set("d", d);
     }

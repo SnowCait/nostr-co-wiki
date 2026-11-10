@@ -42,7 +42,6 @@ export default {fetch(request, env, ctx) {
               ...web.assets,
               directory: resolve("apps/web/.svelte-kit/cloudflare"),
             },
-            vars: { RELAY_URL: "wss://relay.test/" },
           },
         },
         {
@@ -64,11 +63,11 @@ export default {fetch(request, env, ctx) {
     });
     const { url } = await server.listen();
     const worker = () => server.getWorker("nostr-co-wiki-relay");
-    const api = "https://relay.test/admin/articles";
+    const api = url.origin + "/api/admin/articles";
     const auth = async (url = api, method = "GET", payload, signer = sign) =>
       getToken(url, method, signer, true, payload);
     const call = async (method = "GET", suffix = "", payload, authorization) =>
-      worker().fetch(api + suffix, {
+      server.getWorker("nostr-co-wiki-web").fetch(api + suffix, {
         method,
         headers: {
           Authorization:
@@ -77,7 +76,10 @@ export default {fetch(request, env, ctx) {
         },
         body: payload === undefined ? undefined : JSON.stringify(payload),
       });
-    assert.equal((await worker().fetch(api)).status, 401);
+    const unauthenticated = await server
+      .getWorker("nostr-co-wiki-web")
+      .fetch(api);
+    assert.equal(unauthenticated.status, 401, await unauthenticated.text());
     for (const token of [
       await auth(api, "POST"),
       await auth(api + "?wrong=1"),
@@ -98,9 +100,16 @@ export default {fetch(request, env, ctx) {
     ]) {
       assert.equal((await call("GET", "", undefined, token)).status, 401);
     }
-    const preflight = await worker().fetch(api, { method: "OPTIONS" });
-    assert.equal(preflight.status, 204);
-    assert.equal(preflight.headers.get("Access-Control-Allow-Origin"), "*");
+    for (const path of ["/admin/articles", "/api/admin/articles"]) {
+      assert.equal(
+        (
+          await worker().fetch("https://relay.test" + path, {
+            headers: { Authorization: await auth("https://relay.test" + path) },
+          })
+        ).status,
+        404,
+      );
+    }
     const socket = new WebSocket(url.origin.replace("http", "ws") + "/__relay");
     await new Promise((resolve, reject) => {
       socket.onopen = resolve;
@@ -245,21 +254,14 @@ export default {fetch(request, env, ctx) {
       };
     });
     let adminGetRequests = 0;
-    await page.route("https://relay.test/**", async (route) => {
-      const req = route.request();
-      if (req.method() === "GET") {
-        adminGetRequests++;
+    page.on("request", (request) => {
+      const target = new URL(request.url());
+      if (target.pathname === "/api/admin/articles") {
+        assert.equal(target.origin, url.origin);
+        if (request.method() === "GET") {
+          adminGetRequests++;
+        }
       }
-      const response = await worker().fetch(req.url(), {
-        method: req.method(),
-        headers: req.headers(),
-        body: req.postData() ?? undefined,
-      });
-      await route.fulfill({
-        status: response.status,
-        headers: Object.fromEntries(response.headers),
-        body: await response.text(),
-      });
     });
     await page.goto(url.origin + "/admin/articles");
     await page.getByRole("button", { name: "Load articles" }).click();

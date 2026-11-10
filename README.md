@@ -104,6 +104,6 @@ session is stored by the application.
 Open `/admin` for the dashboard and `/admin/articles` for the article list on
 the public host, including `workers.dev` and custom domains.
 
-The dashboard uses the Relay's authenticated `/admin/articles` HTTP API, derived
-from `RELAY_URL`. Each request requires a fresh NIP-98 signature. Non-public article
+The dashboard uses the Web Worker's same-origin `/api/admin/articles` HTTP API,
+which forwards requests unchanged through the Wiki Durable Object binding. Each request requires a fresh NIP-98 signature. Non-public article
 information and publication changes require administrator authorization.

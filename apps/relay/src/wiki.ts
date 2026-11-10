@@ -32,7 +32,7 @@ export class Wiki extends DurableObject<WikiEnvironment> {
   }
 
   async fetch(request: Request): Promise<Response> {
-    if (new URL(request.url).pathname.startsWith("/admin/")) {
+    if (new URL(request.url).pathname.startsWith("/api/admin/")) {
       return administer(request, this.ctx.storage, this.env.ADMIN_PUBLIC_KEY);
     }
     if (
