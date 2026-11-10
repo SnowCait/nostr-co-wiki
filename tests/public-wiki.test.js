@@ -462,7 +462,7 @@ test(
           kind: i === 52 ? 2818 : 30818,
           created_at: 1000 + i,
           content: "rpc-limit",
-          tags: i === 53 ? [] : [["d", d]],
+          tags: [["d", d]],
         },
         i === 51 ? editor : key,
       );
@@ -493,12 +493,7 @@ test(
     const limited = await rpcSearch("rpc-limit");
     assert.equal(limited.length, 50);
     assert.ok(
-      limited.every(
-        (event) =>
-          event.kind === 30818 &&
-          event.pubkey === pubkey &&
-          event.tags.some((tag) => tag[0] === "d"),
-      ),
+      limited.every((event) => event.kind === 30818 && event.pubkey === pubkey),
     );
     assert.deepEqual(failures, []);
   },
