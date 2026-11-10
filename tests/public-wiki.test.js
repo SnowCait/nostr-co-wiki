@@ -182,9 +182,6 @@ test(
         signEvent: (event) => globalThis.signForTest(event),
       };
     });
-    await page
-      .getByRole("button", { name: "Sign and submit Revision" })
-      .waitFor({ state: "visible" });
     await page.waitForFunction(
       () =>
         globalThis.document.querySelector("form button")?.disabled === false,
