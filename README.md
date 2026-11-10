@@ -93,3 +93,17 @@ cannot run the bundled browser, point `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` at a
 compatible installed Chromium when running `npm test`. CI installs its supported
 Chromium and system dependencies. Tests use fixture signing keys and no external
 signing service or Cloudflare credentials.
+
+## Administration
+
+Set the Relay Worker's runtime variable `ADMIN_PUBLIC_KEY` to the administrator's
+`npub1...` public key. Missing or invalid values disable administrative access.
+The administrator signs requests with a NIP-07 extension; no private key or login
+session is stored by the application.
+
+Open `/admin` for the dashboard and `/admin/articles` for the article list on
+the public host, including `workers.dev` and custom domains.
+
+The dashboard uses the Web Worker's same-origin `/api/admin/articles` HTTP API,
+which forwards requests unchanged through the Wiki Durable Object binding. Each request requires a fresh NIP-98 signature. Non-public article
+information and publication changes require administrator authorization.

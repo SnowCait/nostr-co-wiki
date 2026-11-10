@@ -1,3 +1,4 @@
+import { administer } from "./admin";
 import { decode } from "nostr-tools/nip19";
 import { getPublicKey } from "nostr-tools/pure";
 import { DurableObject } from "cloudflare:workers";
@@ -21,6 +22,7 @@ const subscriptionCleanupInterval = 24 * 60 * 60 * 1000;
 
 interface WikiEnvironment {
   WIKI_PRIVATE_KEY: string;
+  ADMIN_PUBLIC_KEY?: string;
 }
 
 export class Wiki extends DurableObject<WikiEnvironment> {
@@ -29,7 +31,10 @@ export class Wiki extends DurableObject<WikiEnvironment> {
     ctx.storage.sql.exec(schema);
   }
 
-  fetch(request: Request): Response {
+  async fetch(request: Request): Promise<Response> {
+    if (new URL(request.url).pathname.startsWith("/api/admin/")) {
+      return administer(request, this.ctx.storage, this.env.ADMIN_PUBLIC_KEY);
+    }
     if (
       new URL(request.url).pathname !== "/" ||
       request.headers.get("Upgrade")?.toLowerCase() !== "websocket"
