@@ -1,109 +1,72 @@
 # NostrCoWiki
 
-Requires Node.js 24 or later and npm.
+Requires Node.js 24 or later and npm. A single Cloudflare Worker named
+`nostr-co-wiki` serves SvelteKit, the Nostr Relay, and its SQLite-backed Wiki
+Durable Object.
 
-Install dependencies with `npm install` and configure the Wiki signing key as
-described below. Start each Worker in its own terminal.
+## Local development
 
-Terminal 1:
-
-```sh
-npm run dev:relay
-```
-
-Terminal 2:
-
-```sh
-npm run dev:web
-```
-
-Open http://localhost:8787. The Relay listens at `ws://localhost:8788/`.
-The Web command builds SvelteKit and starts the Cloudflare Worker runtime.
-Wrangler's local registry connects the Web binding to the Relay-owned SQLite
-Wiki Durable Object. Ctrl+C stops the Worker in that terminal independently.
-Restart `npm run dev:web` after changing Web code. No Cloudflare account is
-required for local development.
-
-```sh
-npm exec playwright -- install chromium
-npm run build
-npm test
-```
-
-Application code uses TypeScript with strict checking. `npm test` generates Worker
-binding types, checks both applications, builds them, and runs the runtime and browser tests.
-Use `npm run types` to regenerate the committed `worker-configuration.d.ts` files
-after changing Wrangler configuration; do not edit those files manually.
-`npm run check` runs type generation and checking without building.
-
-The runtime test checks server-rendered HTML and Web-to-Relay/DO bindings using
-local Workers. Its connection probes exist only in the test entry point.
-
-The Durable Object uses Cloudflare's declarative
-[class exports](https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/)
-with SQLite storage. Local development uses the official
-[multiple-dev-commands workflow](https://developers.cloudflare.com/workers/local-development/multi-workers/#multiple-dev-commands)
-so that both Workers have browser-accessible endpoints.
-
-The Relay accepts NIP-01 WebSocket connections at `/`. To submit Revisions locally,
-set the Wiki signing key in `apps/relay/.dev.vars` (an ignored file):
+Install dependencies with `npm install`. Set the Wiki signing key in the ignored
+root `.dev.vars` file:
 
 ```text
 WIKI_PRIVATE_KEY=<the Wiki's nsec1... private key>
 ```
 
-After this required key setup, start both commands above. Tests inject fixture
-keys and require no credentials.
+Start the application with `npm run dev`, then open http://localhost:8787.
+The command builds SvelteKit and runs one local Wrangler Worker. Restart it after
+changing application code. The Relay is at `ws://localhost:8787/relay`. No
+Cloudflare account is required for local development.
 
-The Web Worker's `WIKI` binding accesses the same object through
-`env.WIKI.getByName("wiki")`. Its `getArticle(d)` method returns the latest public
-Article event or `null`; `getHistory(d)` returns accepted Commit/Revision pairs in
-sequence order. Unpublished articles return `null` or an empty history. These are
-Worker RPC methods, not public HTTP endpoints.
+## Build and verification
 
-Backend integration tests use Wrangler's test harness to exercise WebSockets,
-SQLite transactions, search, and Durable Object hibernation and restart.
+```sh
+npm exec playwright -- install chromium
+npm run lint
+npm run format:check
+npm test
+```
+
+`npm test` generates Worker types, checks TypeScript, builds SvelteKit, and runs
+Node integration tests against Workers, SQLite, WebSockets, and browser flows.
+`npm run check` checks types without building. Use `npm run types` after changing
+Wrangler configuration; do not edit `worker-configuration.d.ts` manually.
+
+`npm run build` uses the Cloudflare adapter. `worker.js` re-exports its generated
+Worker and the Wiki Durable Object class. The Vite configuration creates a
+build-only Wrangler config in `.svelte-kit`, derived from the root config, to
+keep the adapter output separate from the custom entry point.
+
+If the OS cannot run Playwright's bundled Chromium, set
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to a compatible installed Chromium. CI
+installs a supported Chromium and system dependencies. Tests use fixture keys
+and require no Cloudflare credentials.
 
 ## Public Wiki
 
-The public site supports article reading, creation, editing, history, source
-differences, restoration, and search. Creation and editing require a NIP-07
-signing extension; reading and search do not. Editor previews and server-rendered
-articles use the same Djot renderer and HTML sanitizer. A successful Relay response
-confirms acceptance; the editor checks the published Article before navigating.
+The site supports SSR article reading, NIP-07 creation and editing, sanitized
+Djot previews, history, line differences, restoration, and search. Reading does
+not require a signing extension. Conflicting edits preserve the draft. After
+acceptance, the editor confirms Article publication before navigating.
 
-`npm run dev:web` injects `RELAY_URL:ws://localhost:8788/` into the Web
-Worker through Wrangler's `--var` option. The Wrangler configuration contains no
-default Relay URL, and an unset or invalid value produces a configuration error
-on creation/editing pages; it never falls back to localhost. For deployment,
-explicitly set `RELAY_URL` to the deployed Relay's `wss://` URL, for example with
-`wrangler deploy --config apps/web/wrangler.json --var RELAY_URL:wss://relay.example.com/`.
-Keep `WIKI_PRIVATE_KEY` exclusively in the Relay Worker Secret. No Wiki private key
-is sent to the Web Worker or browser.
+Browser Relay connections use the site's origin and `/relay`: HTTPS produces
+`wss://`, HTTP produces `ws://`, and local port numbers are preserved. No Relay
+URL environment variable is needed. Internal reads and search use the Wiki
+Durable Object binding; the public `/relay` endpoint retains NIP-01/NIP-50.
 
-The additional read RPCs are `getWikiPublicKey()`, `getRecentArticles()` (latest
-public Articles, newest first), and `getArticleStatus(d)` (`available`, `published`,
-or `unpublished`). An unpublished identifier reveals no article metadata or content.
-Search uses the Durable Object's `searchArticles()` RPC, sharing the same query
-logic as the Relay's NIP-50 WebSocket interface.
+## Administration and deployment settings
 
-Browser tests use Playwright as a driver with the existing Node test runner and
-Wrangler test harness. Install its Chromium with the command above. If your OS
-cannot run the bundled browser, point `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` at a
-compatible installed Chromium when running `npm test`. CI installs its supported
-Chromium and system dependencies. Tests use fixture signing keys and no external
-signing service or Cloudflare credentials.
+Open `/admin` and `/admin/articles` on the site's host. Set `ADMIN_PUBLIC_KEY`
+as a runtime variable in `npub1...` format. Missing or invalid values disable
+administrative access. The same-origin `/api/admin/articles` endpoint forwards
+requests unchanged to the Wiki Durable Object for NIP-98 authentication,
+administrator authorization, and publication-state/FTS updates.
 
-## Administration
+Configure `WIKI_PRIVATE_KEY` as a Secret on `nostr-co-wiki` before deployment.
+The key stays on the server. Administrator requests are signed through NIP-07;
+no administrator private key, login session, or cookie is stored by the app.
+Dashboard-managed runtime variables are preserved by `keep_vars`.
 
-Set the Relay Worker's runtime variable `ADMIN_PUBLIC_KEY` to the administrator's
-`npub1...` public key. Missing or invalid values disable administrative access.
-The administrator signs requests with a NIP-07 extension; no private key or login
-session is stored by the application.
-
-Open `/admin` for the dashboard and `/admin/articles` for the article list on
-the public host, including `workers.dev` and custom domains.
-
-The dashboard uses the Web Worker's same-origin `/api/admin/articles` HTTP API,
-which forwards requests unchanged through the Wiki Durable Object binding. Each request requires a fresh NIP-98 signature. Non-public article
-information and publication changes require administrator authorization.
+The single root `wrangler.json` declares the `WIKI` binding and its SQLite class
+export. No separate Relay Worker deployment is needed. Existing Durable Object
+data migration is outside the scope of this structure change.

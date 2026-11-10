@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { createTestHarness } from "wrangler";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { getToken } from "nostr-tools/nip98";
@@ -19,36 +18,18 @@ test(
   "administration authenticates requests, controls publication, and serves management routes",
   { timeout: 180000 },
   async (t) => {
-    const dir = await mkdtemp(join(tmpdir(), "nostr-admin-"));
-    const entry = join(dir, "web.js");
-    await writeFile(
-      entry,
-      `import web from ${JSON.stringify(resolve("apps/web/.svelte-kit/cloudflare/_worker.js"))};
-import relay from ${JSON.stringify(resolve("apps/relay/src/index.ts"))};
-export default {fetch(request, env, ctx) {
- const url = new URL(request.url);
- if (url.pathname === '/__relay') { url.pathname = '/'; return relay.fetch(new Request(url, request), env); }
- return web.fetch(request, env, ctx);
-}};`,
-    );
-    const web = JSON.parse(await readFile("apps/web/wrangler.json", "utf8"));
+    const config = JSON.parse(await readFile("wrangler.json", "utf8"));
     const options = {
       workers: [
         {
-          config: {
-            ...web,
-            main: entry,
-            assets: {
-              ...web.assets,
-              directory: resolve("apps/web/.svelte-kit/cloudflare"),
-            },
-          },
-        },
-        {
           secrets: { WIKI_PRIVATE_KEY: nsecEncode(wikiKey) },
           config: {
-            ...JSON.parse(await readFile("apps/relay/wrangler.json", "utf8")),
-            main: resolve("apps/relay/src/index.ts"),
+            ...config,
+            main: resolve("worker.js"),
+            assets: {
+              ...config.assets,
+              directory: resolve(".svelte-kit/cloudflare"),
+            },
             vars: { ADMIN_PUBLIC_KEY: npubEncode(getPublicKey(adminKey)) },
           },
         },
@@ -59,15 +40,13 @@ export default {fetch(request, env, ctx) {
     t.after(async () => {
       await browser?.close();
       await server.close();
-      await rm(dir, { recursive: true, force: true });
     });
     const { url } = await server.listen();
-    const worker = () => server.getWorker("nostr-co-wiki-relay");
     const api = url.origin + "/api/admin/articles";
     const auth = async (url = api, method = "GET", payload, signer = sign) =>
       getToken(url, method, signer, true, payload);
     const call = async (method = "GET", suffix = "", payload, authorization) =>
-      server.getWorker("nostr-co-wiki-web").fetch(api + suffix, {
+      server.getWorker("nostr-co-wiki").fetch(api + suffix, {
         method,
         headers: {
           Authorization:
@@ -76,9 +55,7 @@ export default {fetch(request, env, ctx) {
         },
         body: payload === undefined ? undefined : JSON.stringify(payload),
       });
-    const unauthenticated = await server
-      .getWorker("nostr-co-wiki-web")
-      .fetch(api);
+    const unauthenticated = await server.getWorker("nostr-co-wiki").fetch(api);
     assert.equal(unauthenticated.status, 401, await unauthenticated.text());
     for (const token of [
       await auth(api, "POST"),
@@ -100,17 +77,7 @@ export default {fetch(request, env, ctx) {
     ]) {
       assert.equal((await call("GET", "", undefined, token)).status, 401);
     }
-    for (const path of ["/admin/articles", "/api/admin/articles"]) {
-      assert.equal(
-        (
-          await worker().fetch("https://relay.test" + path, {
-            headers: { Authorization: await auth("https://relay.test" + path) },
-          })
-        ).status,
-        404,
-      );
-    }
-    const socket = new WebSocket(url.origin.replace("http", "ws") + "/__relay");
+    const socket = new WebSocket(url.origin.replace("http", "ws") + "/relay");
     await new Promise((resolve, reject) => {
       socket.onopen = resolve;
       socket.onerror = reject;
@@ -155,7 +122,7 @@ export default {fetch(request, env, ctx) {
     socket.send(JSON.stringify(["EVENT", event]));
     assert.equal((await next((m) => m[0] === "OK"))[2], true);
     const db = await server
-      .getWorker("nostr-co-wiki-relay")
+      .getWorker("nostr-co-wiki")
       .getDurableObjectStorage("Wiki", { name: "wiki" });
     const before = await db.exec(
       "SELECT id FROM events WHERE kind IN (2818,3818) ORDER BY id",
@@ -218,13 +185,13 @@ export default {fetch(request, env, ctx) {
       before,
     );
     for (const setting of [undefined, "invalid"]) {
-      options.workers[1].config.vars = setting
+      options.workers[0].config.vars = setting
         ? { ADMIN_PUBLIC_KEY: setting }
         : {};
       await server.update(options);
       assert.equal((await call()).status, 401);
     }
-    options.workers[1].config.vars = {
+    options.workers[0].config.vars = {
       ADMIN_PUBLIC_KEY: npubEncode(getPublicKey(adminKey)),
     };
     await server.update(options);

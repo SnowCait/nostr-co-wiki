@@ -2,25 +2,20 @@
   "name": "nostr-co-wiki",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "dev:web": "npm run build --workspace @nostr-co-wiki/web && wrangler dev -c apps/web/wrangler.json --port 8787 --var RELAY_URL:ws://localhost:8788/",
-    "dev:relay": "npm run dev --workspace @nostr-co-wiki/relay -- --port 8788",
-    "build": "npm run build --workspaces --if-present",
-    "test": "npm run check && npm run build && node --test tests/*.test.js apps/relay/tests/*.test.js",
-    "types": "npm run types --workspaces --if-present",
-    "check": "npm run types && npm run check --workspaces --if-present",
+    "dev": "npm run build && wrangler dev",
+    "build": "vite build",
+    "check": "npm run types && svelte-kit sync && svelte-check --tsconfig tsconfig.json",
+    "test": "npm run check && npm run build && node --test tests/*.test.js",
+    "types": "wrangler types",
+    "types:check": "wrangler types --check",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write \"{apps,tests,packages}/**/*.{js,ts,svelte,html,css}\" eslint.config.js",
-    "format:check": "prettier --check \"{apps,tests,packages}/**/*.{js,ts,svelte,html,css}\" eslint.config.js",
-    "types:check": "npm run types:check --workspaces --if-present"
+    "format": "prettier --write \"{src,tests}/**/*.{js,ts,svelte,html,css}\" worker.js vite.config.ts eslint.config.js",
+    "format:check": "prettier --check \"{src,tests}/**/*.{js,ts,svelte,html,css}\" worker.js vite.config.ts eslint.config.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -33,6 +28,24 @@
     "prettier-plugin-svelte": "^4.1.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.1",
-    "wrangler": "^4.158.0"
+    "wrangler": "^4.158.0",
+    "@sveltejs/adapter-cloudflare": "^8.0.2",
+    "@sveltejs/kit": "^3.1.1",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@types/node": "^24.19.2",
+    "@types/sanitize-html": "^2.16.2",
+    "svelte": "^5.57.3",
+    "svelte-check": "^4.7.8",
+    "vite": "^8.3.7"
+  },
+  "dependencies": {
+    "@djot/djot": "^0.3.2",
+    "diff": "^9.0.0",
+    "nip07-awaiter": "^1.1.0",
+    "nostr-tools": "^2.26.0",
+    "sanitize-html": "^2.18.1"
+  },
+  "imports": {
+    "#lib/*": "./src/lib/*"
   }
 }

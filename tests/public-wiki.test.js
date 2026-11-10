@@ -7,12 +7,9 @@ import { createTestHarness } from "wrangler";
 import { chromium } from "playwright";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { nsecEncode } from "nostr-tools/nip19";
-import { normalizeIdentifier } from "@nostr-co-wiki/protocol/identifier";
-import { renderArticle } from "../apps/web/src/lib/server/render.ts";
-import {
-  createRevision,
-  submitRevision,
-} from "../apps/web/src/lib/submission.ts";
+import { normalizeIdentifier } from "../src/lib/identifier.ts";
+import { renderArticle } from "../src/lib/server/render.ts";
+import { createRevision, submitRevision } from "../src/lib/submission.ts";
 
 const key = new Uint8Array(32).fill(7);
 const editor = new Uint8Array(32).fill(8);
@@ -49,22 +46,16 @@ test(
   { timeout: 180000 },
   async (t) => {
     const directory = await mkdtemp(join(tmpdir(), "nostr-public-"));
-    const webConfig = JSON.parse(
-      await readFile("apps/web/wrangler.json", "utf8"),
-    );
+    const webConfig = JSON.parse(await readFile("wrangler.json", "utf8"));
     const entry = join(directory, "web.js");
     await writeFile(
       entry,
       `
-    import web from ${JSON.stringify(resolve("apps/web/.svelte-kit/cloudflare/_worker.js"))};
-    import relay from ${JSON.stringify(resolve("apps/relay/src/index.ts"))};
+    import web from ${JSON.stringify(resolve(".svelte-kit/cloudflare/_worker.js"))};
+    export { Wiki } from ${JSON.stringify(resolve("src/lib/server/wiki/wiki.ts"))};
     export default { async fetch(request, env, ctx) {
       const url = new URL(request.url);
       if (url.pathname === '/__search') return Response.json(await env.WIKI.getByName('wiki').searchArticles(url.searchParams.get('q')));
-      if (url.pathname === '/__relay') {
-        url.pathname = '/';
-        return relay.fetch(new Request(url, request), env);
-      }
       return web.fetch(request, env, ctx);
     }};
   `,
@@ -72,18 +63,15 @@ test(
     const options = {
       workers: [
         {
+          secrets: { WIKI_PRIVATE_KEY: nsecEncode(key) },
           config: {
             ...webConfig,
             main: entry,
             assets: {
               ...webConfig.assets,
-              directory: resolve("apps/web/.svelte-kit/cloudflare"),
+              directory: resolve(".svelte-kit/cloudflare"),
             },
           },
-        },
-        {
-          configPath: "apps/relay/wrangler.json",
-          secrets: { WIKI_PRIVATE_KEY: nsecEncode(key) },
         },
       ],
     };
@@ -99,14 +87,18 @@ test(
     });
     const { url } = await server.listen();
     const base = url.origin;
-    const relayUrl = base.replace(/^http/, "ws") + "/__relay";
-    const missingRelay = await fetch(base + "/new");
-    assert.equal(missingRelay.status, 503);
-    assert.match(await missingRelay.text(), /The Relay URL is not configured/);
-    options.workers[0].config.vars = { RELAY_URL: relayUrl };
-    await server.update(options);
+    assert.match(
+      await (
+        await server
+          .getWorker("nostr-co-wiki")
+          .fetch("https://wiki.example:8443/new")
+      ).text(),
+      /wss:\/\/wiki\.example:8443\/relay/,
+    );
+    const relayUrl = base.replace(/^http/, "ws") + "/relay";
+    assert.equal((await fetch(base + "/new")).status, 200);
     const db = await server
-      .getWorker("nostr-co-wiki-relay")
+      .getWorker("nostr-co-wiki")
       .getDurableObjectStorage("Wiki", { name: "wiki" });
     const request = (path, options = {}) =>
       fetch(base + path, {
@@ -138,6 +130,7 @@ test(
     });
     const page = await context.newPage();
     const failures = [];
+    page.on("websocket", (socket) => assert.equal(socket.url(), relayUrl));
     page.on("pageerror", (error) => failures.push(error.message));
     await page.goto(base);
     assert.match(await page.content(), /No published articles yet/);

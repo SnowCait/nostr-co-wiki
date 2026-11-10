@@ -13,25 +13,26 @@ This document describes system components, their responsibilities, and the flow 
 
 | Component | Responsibility |
 | --- | --- |
-| Web (`apps/web/`) | A single SvelteKit application on one Cloudflare Worker; renders public article pages with SSR, provides the editing UI, and serves the administrator dashboard and HTTP API. |
-| Relay (`apps/relay/`) | Independent Cloudflare Worker; accepts Nostr WebSocket connections for event acceptance and distribution. |
-| Wiki Durable Object | One SQLite-backed Durable Object per Wiki; handles subscriptions, Wiki-specific event processing, NIP-98 authentication and administrator authorization, and administrative operations; owns persistent state. |
-| Protocol package (`packages/protocol/`) | Shared code required by both the Web and Relay applications. Application-specific code remains in its application. |
+| SvelteKit (`src/`) | Runs on the single `nostr-co-wiki` Cloudflare Worker; serves public SSR pages, the editor, management UI and HTTP API, and the `/relay` WebSocket endpoint. |
+| Wiki Durable Object (`src/lib/server/wiki/`) | SQLite-backed object owned by the same Worker; handles Nostr events, subscriptions, storage, NIP-98 authentication and administrator authorization, and publication control. |
+| Identifier normalization (`src/lib/identifier.ts`) | Shared identifier generation for the UI, rendering, and Revision validation. |
+
+`worker.js` re-exports the adapter-generated SvelteKit Worker and the `Wiki` class. The Vite configuration derives an adapter-only generated config from `wrangler.json` so the adapter writes its output to `.svelte-kit/cloudflare/_worker.js` rather than overwriting the entry point.
 
 Nostr relay handling and Wiki-specific event processing are separate responsibilities inside the same Durable Object. The design does not introduce D1, external PostgreSQL, or external Pub/Sub.
 
 ## Communication
 
-- **Reading:** The Web Worker fetches published Article data through a Durable Object binding and renders the page on the server.
-- **Editing:** The browser signs Revisions through NIP-07 and sends them to the Relay over NIP-01 WebSocket. NIP-46 is a possible future option, not an initial dependency.
+- **Reading:** The Worker fetches published Article data through a Durable Object binding and renders the page on the server.
+- **Editing:** The browser signs Revisions through NIP-07 and sends them to the same-origin `/relay` endpoint over NIP-01 WebSocket. NIP-46 is a possible future option, not an initial dependency.
 - **Subscriptions:** The Relay serves NIP-01 event subscriptions through the Wiki Durable Object.
-- **Administration:** The dashboard uses the Web Worker's same-origin `/api/admin/articles` HTTP API. The Web Worker forwards requests unchanged through the existing binding to the Relay-owned Wiki Durable Object, which performs authentication, authorization, and administrative operations. Administrative operations and HTTP requests for unpublished article information require NIP-98 authentication and administrator authorization. Detailed routes and payloads are implementation concerns.
+- **Administration:** The dashboard uses the Worker's same-origin `/api/admin/articles` HTTP API. The Worker forwards requests unchanged through the existing binding to the Wiki Durable Object in the same Worker, which performs authentication, authorization, and administrative operations. Administrative operations and HTTP requests for unpublished article information require NIP-98 authentication and administrator authorization. Detailed routes and payloads are implementation concerns.
 
 ## Administration Routing
 
 The administrator dashboard is available at `/admin` and the article management list at `/admin/articles` on the public site's host, including `workers.dev` and custom domains. The public site has no administration controls or links to the dashboard.
 
-The dashboard shares the existing Web Worker, Relay Worker, and Wiki Durable Object.
+The dashboard shares the single Worker and its Wiki Durable Object.
 
 ## Revision Processing
 
@@ -66,11 +67,11 @@ Unpublished articles are excluded from public rendering, search results, and rel
 
 The Durable Object uses the WebSocket Hibernation API. Per-connection subscription state is held in WebSocket attachments and restored after hibernation.
 
-The Relay Worker obtains the client's IP address when establishing a WebSocket connection and passes it to the Durable Object, which uses it for Revision acceptance receipts.
+The `/relay` route preserves the client's IP header when forwarding a WebSocket upgrade to the Durable Object at `/`, which uses it for Revision acceptance receipts.
 
 ## Keys and Administration
 
-- `WIKI_PRIVATE_KEY`: Relay Worker Secret containing the Wiki private key in `nsec1...` format, used for signing Commits and Articles.
+- `WIKI_PRIVATE_KEY`: Worker Secret containing the Wiki private key in `nsec1...` format, used for signing Commits and Articles.
 - `ADMIN_PUBLIC_KEY`: environment variable containing the administrator's public key in `npub1...` format.
 - The administrator's private key is not stored by the Relay. No custom login session or private-key storage mechanism is introduced.
 - Administrator privileges apply to the whole Wiki, not individual articles.
@@ -78,23 +79,24 @@ The Relay Worker obtains the client's IP address when establishing a WebSocket c
 
 ## Article Rendering
 
-Article content is Djot. The Web Worker converts it to HTML and sanitizes the output before rendering. Article links follow NIP-54. The Djot library has not yet been selected.
+Article content is Djot. The Worker converts it to HTML and sanitizes the output before rendering. Article links follow NIP-54. The Djot library has not yet been selected.
 
 ## Repository Structure
 
 ```text
-apps/
-  web/
-  relay/
-packages/
-  protocol/
+src/
+  routes/
+  lib/
+    identifier.ts
+    server/wiki/
+tests/
 docs/
-  protocol.md
-  architecture.md
-  database.md
+worker.js
+wrangler.json
+vite.config.ts
 ```
 
-npm workspaces is the preferred workspace arrangement. The Deploy to Cloudflare button remains undecided.
+Dependencies and npm commands are managed in one root package. The Deploy to Cloudflare button remains undecided.
 
 ## Initial Protocol Scope
 
