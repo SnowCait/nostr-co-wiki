@@ -1,8 +1,12 @@
+import { decode } from "nostr-tools/nip19";
+import { getPublicKey } from "nostr-tools/pure";
 import { DurableObject } from "cloudflare:workers";
 import type { Event } from "nostr-tools/pure";
+
+type WikiEvent = Omit<Event, symbol>;
 import type { Filter } from "nostr-tools/filter";
 import { acceptRevision } from "./revision";
-import { getArticle, getHistory, queryEvents } from "./query";
+import { getArticle, getArticleStatus, getHistory, queryEvents } from "./query";
 import { schema } from "./schema";
 import { matches, parseFilter, record, signedEvent } from "./protocol";
 
@@ -196,11 +200,33 @@ export class Wiki extends DurableObject<WikiEnvironment> {
     this.ctx.storage.kv.delete(`subscriptions:${connection.id}`);
   }
 
-  getArticle(d: string): Event | null {
+  getWikiPublicKey(): string {
+    const key = decode(this.env.WIKI_PRIVATE_KEY);
+    if (key.type !== "nsec") {
+      throw new Error("Wiki signing key must be nsec");
+    }
+    return getPublicKey(key.data);
+  }
+
+  getArticleStatus(d: string): "available" | "published" | "unpublished" {
+    return getArticleStatus(this.ctx.storage.sql, d);
+  }
+
+  searchArticles(search: string): WikiEvent[] {
+    return queryEvents(this.ctx.storage.sql, [
+      { kinds: [30818], authors: [this.getWikiPublicKey()], search, limit: 50 },
+    ]);
+  }
+
+  getRecentArticles(): WikiEvent[] {
+    return queryEvents(this.ctx.storage.sql, [{ kinds: [30818] }]);
+  }
+
+  getArticle(d: string): WikiEvent | null {
     return getArticle(this.ctx.storage.sql, d);
   }
 
-  getHistory(d: string): { commit: Event; revision: Event | null }[] {
+  getHistory(d: string): { commit: WikiEvent; revision: WikiEvent | null }[] {
     return getHistory(this.ctx.storage.sql, d);
   }
 

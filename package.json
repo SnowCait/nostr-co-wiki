@@ -3,24 +3,24 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "apps/*"
+    "apps/*",
+    "packages/*"
   ],
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "dev": "npm run build --workspace @nostr-co-wiki/web && wrangler dev -c apps/web/wrangler.json -c apps/relay/wrangler.json",
-    "dev:web": "npm run dev --workspace @nostr-co-wiki/web",
-    "dev:relay": "npm run dev --workspace @nostr-co-wiki/relay",
-    "build": "npm run build --workspaces",
+    "dev:web": "npm run build --workspace @nostr-co-wiki/web && wrangler dev -c apps/web/wrangler.json --port 8787 --var RELAY_URL:ws://localhost:8788/",
+    "dev:relay": "npm run dev --workspace @nostr-co-wiki/relay -- --port 8788",
+    "build": "npm run build --workspaces --if-present",
     "test": "npm run check && npm run build && node --test tests/*.test.js apps/relay/tests/*.test.js",
-    "types": "npm run types --workspaces",
-    "check": "npm run types && npm run check --workspaces",
+    "types": "npm run types --workspaces --if-present",
+    "check": "npm run types && npm run check --workspaces --if-present",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write \"{apps,tests}/**/*.{js,ts,svelte,html}\" eslint.config.js",
-    "format:check": "prettier --check \"{apps,tests}/**/*.{js,ts,svelte,html}\" eslint.config.js",
-    "types:check": "npm run types:check --workspaces"
+    "format": "prettier --write \"{apps,tests,packages}/**/*.{js,ts,svelte,html,css}\" eslint.config.js",
+    "format:check": "prettier --check \"{apps,tests,packages}/**/*.{js,ts,svelte,html,css}\" eslint.config.js",
+    "types:check": "npm run types:check --workspaces --if-present"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -28,6 +28,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-svelte": "^3.24.1",
     "globals": "^17.14.0",
+    "playwright": "^1.65.0",
     "prettier": "3.9.10",
     "prettier-plugin-svelte": "^4.1.1",
     "typescript": "^6.0.3",

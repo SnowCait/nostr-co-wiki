@@ -10,6 +10,7 @@
     "types:check": "wrangler types --check"
   },
   "dependencies": {
+    "@nostr-co-wiki/protocol": "*",
     "nostr-tools": "^2.26.0"
   }
 }
