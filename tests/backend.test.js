@@ -234,12 +234,7 @@ test(
           return web.fetch(request, env, ctx);
         }
       };
-    `,
-    );
-    await writeFile(
-      webProbe,
-      (await readFile(webProbe, "utf8")) +
-        `
+
       import { Wiki as BackendWiki } from ${JSON.stringify(resolve("src/lib/server/wiki/wiki.ts"))};
       import { queryEvents } from ${JSON.stringify(resolve("src/lib/server/wiki/query.ts"))};
       export class Wiki extends BackendWiki {

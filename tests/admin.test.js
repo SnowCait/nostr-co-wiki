@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { createTestHarness } from "wrangler";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { getToken } from "nostr-tools/nip98";
@@ -19,7 +18,6 @@ test(
   "administration authenticates requests, controls publication, and serves management routes",
   { timeout: 180000 },
   async (t) => {
-    const dir = await mkdtemp(join(tmpdir(), "nostr-admin-"));
     const config = JSON.parse(await readFile("wrangler.json", "utf8"));
     const options = {
       workers: [
@@ -42,7 +40,6 @@ test(
     t.after(async () => {
       await browser?.close();
       await server.close();
-      await rm(dir, { recursive: true, force: true });
     });
     const { url } = await server.listen();
     const api = url.origin + "/api/admin/articles";
