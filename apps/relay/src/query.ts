@@ -2,6 +2,23 @@ import { compareEvents, type Event } from "nostr-tools/pure";
 import type { Filter } from "nostr-tools/filter";
 import { parseFilter, matches, searchRank, searchText } from "./protocol";
 
+export function getArticleStatus(
+  sql: SqlStorage,
+  d: string,
+): "available" | "published" | "unpublished" {
+  const article = sql
+    .exec<{ is_published: number }>(
+      "SELECT is_published FROM articles WHERE d = ?",
+      d,
+    )
+    .toArray()[0];
+  return article
+    ? article.is_published === 1
+      ? "published"
+      : "unpublished"
+    : "available";
+}
+
 export function getArticle(sql: SqlStorage, d: string): Event | null {
   return (
     sql

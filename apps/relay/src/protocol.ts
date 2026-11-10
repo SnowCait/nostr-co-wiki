@@ -1,15 +1,7 @@
+import { normalizeIdentifier } from "@nostr-co-wiki/protocol/identifier";
 import { validateEvent, verifyEvent, type Event } from "nostr-tools/pure";
 import { matchFilter, type Filter } from "nostr-tools/filter";
 import { isHex32 } from "nostr-tools/utils";
-
-function normalizeIdentifier(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/\s/gu, "-")
-    .replace(/[^\p{L}\p{N}\p{M}-]/gu, "")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
 
 export function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

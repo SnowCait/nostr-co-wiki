@@ -1,0 +1,9 @@
+{
+  "name": "@nostr-co-wiki/protocol",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./identifier": "./src/identifier.ts",
+    "./event": "./src/event.ts"
+  }
+}
