@@ -34,3 +34,22 @@ The Durable Object uses Cloudflare's declarative
 [class exports](https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/)
 with SQLite storage. Combined development uses the official
 [multiple-Worker workflow](https://developers.cloudflare.com/workers/local-development/multi-workers/).
+
+The Relay accepts NIP-01 WebSocket connections at `/`. To submit Revisions locally,
+set the Wiki signing key in `apps/relay/.dev.vars` (an ignored file):
+
+```text
+WIKI_PRIVATE_KEY=<the Wiki's nsec1... private key>
+```
+
+Run `npm run dev:relay` and connect to `ws://localhost:8787/`. Backend tests inject
+their own test key and require no credentials.
+
+The Web Worker's `WIKI` binding accesses the same object through
+`env.WIKI.getByName("wiki")`. Its `getArticle(d)` method returns the latest public
+Article event or `null`; `getHistory(d)` returns accepted Commit/Revision pairs in
+sequence order. Unpublished articles return `null` or an empty history. These are
+Worker RPC methods, not public HTTP endpoints.
+
+Backend integration tests use Wrangler's test harness to exercise WebSockets,
+SQLite transactions, search, and Durable Object hibernation and restart.
