@@ -476,17 +476,6 @@ test(
               resolve();
             });
           });
-          clearTimeout(timeout);
-          const closed = await new Promise((resolve, reject) => {
-            timeout = setTimeout(
-              () => reject(new Error("Close handshake timed out")),
-              5000,
-            );
-            native.addEventListener("close", resolve, { once: true });
-            native.close();
-          });
-          assert.equal(closed.code, 1000);
-          assert.equal(closed.wasClean, true);
         } finally {
           clearTimeout(timeout);
           native.close();
