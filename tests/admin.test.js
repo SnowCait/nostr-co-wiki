@@ -16,7 +16,7 @@ const pubkey = getPublicKey(wikiKey);
 const sign = (event) => finalizeEvent(event, adminKey);
 
 test(
-  "administration authenticates requests, controls publication, and routes both host configurations",
+  "administration authenticates requests, controls publication, and serves management routes",
   { timeout: 180000 },
   async (t) => {
     const dir = await mkdtemp(join(tmpdir(), "nostr-admin-"));
@@ -286,21 +286,6 @@ export default {fetch(request, env, ctx) {
       0,
     );
     assert.deepEqual(failures, []);
-    options.workers[0].config.vars.ADMIN_HOSTNAME = "admin.test";
-    await server.update(options);
-    for (const host of ["public.test", "example.workers.dev"]) {
-      for (const path of ["/admin", "/admin/articles"]) {
-        assert.equal((await server.fetch("http://" + host + path)).status, 404);
-      }
-    }
-    assert.match(
-      await (await server.fetch("http://admin.test/")).text(),
-      /Wiki administration/,
-    );
-    assert.match(
-      await (await server.fetch("http://admin.test/articles")).text(),
-      /Manage articles/,
-    );
-    assert.equal((await server.fetch("http://public.test/")).status, 200);
+    assert.equal((await fetch(url.origin + "/")).status, 200);
   },
 );

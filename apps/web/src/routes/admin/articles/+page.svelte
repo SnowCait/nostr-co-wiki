@@ -93,7 +93,7 @@
 </script>
 
 <h1>Manage articles</h1>
-<a href={resolve(data.adminBase ? "/admin" : "/")}>Administration dashboard</a>
+<a href={resolve("/admin")}>Administration dashboard</a>
 {#if !signingAvailable}<p role="status">
     Waiting for a NIP-07 signing extension. Administrator requests require a
     signature.

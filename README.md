@@ -101,11 +101,8 @@ Set the Relay Worker's runtime variable `ADMIN_PUBLIC_KEY` to the administrator'
 The administrator signs requests with a NIP-07 extension; no private key or login
 session is stored by the application.
 
-With no `ADMIN_HOSTNAME` runtime variable on the Web Worker, open `/admin` and
-`/admin/articles` on the public host, including `workers.dev`. Set `ADMIN_HOSTNAME`
-to a hostname without a scheme or path to serve the dashboard at `/` and the list
-at `/articles` on that host instead. Other hosts then return 404 for `/admin`
-and its subpaths. Both hostnames must reach the same Web Worker.
+Open `/admin` for the dashboard and `/admin/articles` for the article list on
+the public host, including `workers.dev` and custom domains.
 
 The dashboard uses the Relay's authenticated `/admin/articles` HTTP API, derived
 from `RELAY_URL`. Each request requires a fresh NIP-98 signature. Non-public article
