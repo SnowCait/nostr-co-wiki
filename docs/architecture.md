@@ -13,7 +13,7 @@ This document describes system components, their responsibilities, and the flow 
 
 | Component | Responsibility |
 | --- | --- |
-| Web (`apps/web/`) | A single SvelteKit application on one Cloudflare Worker, with separate public-site and administrator-site Custom Domains; renders public article pages with SSR, provides the editing UI, and serves the administrator dashboard. |
+| Web (`apps/web/`) | A single SvelteKit application on one Cloudflare Worker; renders public article pages with SSR, provides the editing UI, and serves the administrator dashboard. |
 | Relay (`apps/relay/`) | Independent Cloudflare Worker; accepts Nostr WebSocket connections and exposes administrative HTTP operations. |
 | Wiki Durable Object | One SQLite-backed Durable Object per Wiki; handles subscriptions and Wiki-specific event processing, and owns persistent state. |
 | Protocol package (`packages/protocol/`) | Shared code required by both the Web and Relay applications. Application-specific code remains in its application. |
@@ -29,14 +29,13 @@ Nostr relay handling and Wiki-specific event processing are separate responsibil
 
 ## Host-Based Routing
 
-The public site and administrator dashboard use separate Custom Domains assigned to the same Web Worker. The hostnames below are examples and do not fix the deployed domain names:
+The optional Web Worker environment variable `ADMIN_HOSTNAME` selects how the public site and administrator dashboard are routed. It contains a hostname without a scheme or path; no specific domain is hardcoded.
 
-| Host | Public routes |
-| --- | --- |
-| `wiki.example.com` | `/` for the Wiki home page, `/wiki/{d}` for article pages, and `/search` for search. `/admin` and `/admin/*` return 404 Not Found. |
-| `admin.wiki.example.com` | `/` for the administration dashboard and `/articles` for the article management list. |
+When `ADMIN_HOSTNAME` is unset, the dashboard is available on the public site's host at `/admin`, and the article management list is at `/admin/articles`. This also works on a `workers.dev` hostname and does not require a custom domain.
 
-Inside SvelteKit, the dashboard is implemented under `/admin` routes. Requests arriving on the administrator hostname are internally routed to those routes while the browser URL remains on the administrator hostname. The public hostname returns 404 for `/admin` and `/admin/*`, including requests from administrators. The public site has no administration controls or links to the dashboard.
+When `ADMIN_HOSTNAME` is set, the dashboard is available at `/` on that hostname, and the article management list is at `/articles`. Requests to the administrator hostname are internally routed to the SvelteKit `/admin` routes while the browser URL remains unchanged. On every other hostname, including `workers.dev`, `/admin` and `/admin/*` return 404 Not Found, even for administrators.
+
+In both configurations, the public site has no administration controls or links to the dashboard.
 
 SvelteKit `reroute` and `handle` are candidates for implementing this routing. This document does not prescribe implementation code. The dashboard shares the existing Web Worker, Relay Worker, and Wiki Durable Object; no dedicated dashboard Worker or SvelteKit application is introduced.
 
@@ -79,9 +78,10 @@ The Relay Worker obtains the client's IP address when establishing a WebSocket c
 
 - `WIKI_PRIVATE_KEY`: Relay Worker Secret containing the Wiki private key in `nsec1...` format, used for signing Commits and Articles.
 - `ADMIN_PUBLIC_KEY`: environment variable containing the administrator's public key in `npub1...` format.
+- `ADMIN_HOSTNAME`: optional Web Worker environment variable selecting the administrator hostname, without a scheme or path, as described in [Host-Based Routing](#host-based-routing).
 - The administrator's private key is not stored by the Relay. No custom login session or private-key storage mechanism is introduced.
 - Administrator privileges apply to the whole Wiki, not individual articles.
-- Administrators can unpublish and republish articles through the NIP-98-authenticated HTTP API without generating Revisions or Commits. Requests for unpublished article information and administrative operations require both authentication and administrator authorization; the separate hostname is not a substitute for either.
+- Administrators can unpublish and republish articles through the NIP-98-authenticated HTTP API without generating Revisions or Commits. Requests for unpublished article information and administrative operations require both authentication and administrator authorization based on `ADMIN_PUBLIC_KEY`; hostname-based routing is not a substitute for either.
 
 ## Article Rendering
 

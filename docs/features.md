@@ -191,7 +191,7 @@ Wiki administrators can unpublish and republish articles.
 
 Administrative actions use NIP-98 authentication.
 
-An administrator-only dashboard is provided on a subdomain separate from the public site. The specific subdomain name and deployment configuration are not defined here. The public site does not contain administrative controls or links to the dashboard.
+An administrator-only dashboard is provided on the public site's host under `/admin` by default, including on `workers.dev`. When an administrator hostname is configured, the dashboard is provided on that host instead, as described in [architecture.md](architecture.md#host-based-routing). The public site does not contain administrative controls or links to the dashboard.
 
 The dashboard lists published and unpublished articles and shows each article's publication state. It allows authorized administrators to unpublish published articles and republish unpublished articles. Administrators can access unpublished articles through the dashboard. No custom administrative private-key storage is introduced.
 
@@ -199,6 +199,8 @@ Administration permissions apply to the entire Wiki.
 
 ### Acceptance Criteria
 
+- Without an administrator hostname, administrators can access the dashboard at `/admin` and the article list at `/admin/articles` on the public host, including `workers.dev`.
+- With an administrator hostname, the dashboard is at `/` and the article list at `/articles` on that host; `/admin` and `/admin/*` return 404 on all other hosts, including `workers.dev`.
 - Authorized administrators can unpublish a published article.
 - The administrator-only dashboard lists published and unpublished articles and shows their publication state.
 - Authorized administrators can access unpublished articles through the dashboard.
