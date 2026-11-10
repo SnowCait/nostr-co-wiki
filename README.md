@@ -84,8 +84,8 @@ is sent to the Web Worker or browser.
 The additional read RPCs are `getWikiPublicKey()`, `getRecentArticles()` (latest
 public Articles, newest first), and `getArticleStatus(d)` (`available`, `published`,
 or `unpublished`). An unpublished identifier reveals no article metadata or content.
-Search sends NIP-01/NIP-50 messages to the Relay's existing WebSocket handler
-through the Web Worker's Durable Object binding.
+Search uses the Durable Object's `searchArticles()` RPC, sharing the same query
+logic as the Relay's NIP-50 WebSocket interface.
 
 Browser tests use Playwright as a driver with the existing Node test runner and
 Wrangler test harness. Install its Chromium with the command above. If your OS

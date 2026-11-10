@@ -58,8 +58,9 @@ test(
       `
     import web from ${JSON.stringify(resolve("apps/web/.svelte-kit/cloudflare/_worker.js"))};
     import relay from ${JSON.stringify(resolve("apps/relay/src/index.ts"))};
-    export default { fetch(request, env, ctx) {
+    export default { async fetch(request, env, ctx) {
       const url = new URL(request.url);
+      if (url.pathname === '/__search') return Response.json(await env.WIKI.getByName('wiki').searchArticles(url.searchParams.get('q')));
       if (url.pathname === '/__relay') {
         url.pathname = '/';
         return relay.fetch(new Request(url, request), env);
@@ -352,6 +353,17 @@ test(
       searchLinks.indexOf("/wiki/ranking") <
         searchLinks.indexOf("/wiki/ranking-guide"),
     );
+    const rpcSearch = async (q) =>
+      (await request("/__search?q=" + encodeURIComponent(q))).json();
+    const ranked = await rpcSearch("ranking");
+    assert.deepEqual(
+      ranked.map((event) => event.tags.find((tag) => tag[0] === "d")[1]),
+      ["ranking", "ranking-guide"],
+    );
+    assert.ok(
+      ranked.every((event) => event.kind === 30818 && event.pubkey === pubkey),
+    );
+    assert.deepEqual(await rpcSearch("日"), []);
     const home = await (await request("/")).text();
     const published = (
       await db.exec("SELECT data FROM events WHERE kind = 30818")
@@ -383,6 +395,11 @@ test(
         "/wiki/ranking",
       ),
       false,
+    );
+    assert.ok(
+      !(await rpcSearch("ranking")).some((event) =>
+        event.tags.some((tag) => tag[0] === "d" && tag[1] === "ranking"),
+      ),
     );
     await page.goto(base + "/new");
     await page.getByLabel("Title (required)").fill("Ranking");
@@ -437,6 +454,51 @@ test(
           globalThis.innerWidth,
       ),
       true,
+    );
+    for (let i = 0; i < 54; i++) {
+      const d = "rpc-limit-" + i;
+      const event = finalizeEvent(
+        {
+          kind: i === 52 ? 2818 : 30818,
+          created_at: 1000 + i,
+          content: "rpc-limit",
+          tags: i === 53 ? [] : [["d", d]],
+        },
+        i === 51 ? editor : key,
+      );
+      const id = Buffer.from(event.id, "hex");
+      await db.exec(
+        "INSERT INTO events (id, kind, pubkey, created_at, article_d, data) VALUES (?, ?, ?, ?, ?, ?)",
+        id,
+        event.kind,
+        Buffer.from(event.pubkey, "hex"),
+        event.created_at,
+        d,
+        JSON.stringify(event),
+      );
+      const rows = await db.exec(
+        "INSERT INTO articles (d, head_commit_id, published_event_id, is_published) VALUES (?, ?, ?, 1) RETURNING id",
+        d,
+        id,
+        id,
+      );
+      await db.exec(
+        "INSERT INTO article_fts (rowid, d, title, summary, content) VALUES (?, ?, ?, '', ?)",
+        rows[0].id,
+        d,
+        d,
+        event.content,
+      );
+    }
+    const limited = await rpcSearch("rpc-limit");
+    assert.equal(limited.length, 50);
+    assert.ok(
+      limited.every(
+        (event) =>
+          event.kind === 30818 &&
+          event.pubkey === pubkey &&
+          event.tags.some((tag) => tag[0] === "d"),
+      ),
     );
     assert.deepEqual(failures, []);
   },

@@ -212,6 +212,14 @@ export class Wiki extends DurableObject<WikiEnvironment> {
     return getArticleStatus(this.ctx.storage.sql, d);
   }
 
+  searchArticles(search: string): WikiEvent[] {
+    return queryEvents(this.ctx.storage.sql, [
+      { kinds: [30818], authors: [this.getWikiPublicKey()], search, limit: 50 },
+    ]).filter(
+      (event) => event.tags.find((tag) => tag[0] === "d")?.[1] !== undefined,
+    );
+  }
+
   getRecentArticles(): WikiEvent[] {
     return queryEvents(this.ctx.storage.sql, [{ kinds: [30818] }]);
   }
