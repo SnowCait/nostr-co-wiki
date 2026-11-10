@@ -33,7 +33,9 @@ export class Wiki extends DurableObject<WikiEnvironment> {
       return new Response("Not Found", { status: 404 });
     }
     const ip = request.headers.get("CF-Connecting-IP");
-    if (!ip) return new Response("Missing connection address", { status: 400 });
+    if (!ip) {
+      return new Response("Missing connection address", { status: 400 });
+    }
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({
@@ -49,7 +51,9 @@ export class Wiki extends DurableObject<WikiEnvironment> {
   ): Promise<void> {
     let message: unknown;
     try {
-      if (typeof data !== "string") throw new Error();
+      if (typeof data !== "string") {
+        throw new Error();
+      }
       message = JSON.parse(data);
     } catch {
       this.#send(socket, ["NOTICE", "invalid: expected a JSON message"]);
@@ -67,7 +71,9 @@ export class Wiki extends DurableObject<WikiEnvironment> {
       let event: Event;
       let accepted: Event[];
       try {
-        if (message.length !== 2) throw new Error("invalid: EVENT message");
+        if (message.length !== 2) {
+          throw new Error("invalid: EVENT message");
+        }
         event = signedEvent(message[1]);
         const connection: Connection = socket.deserializeAttachment();
         accepted = await acceptRevision(
@@ -90,7 +96,9 @@ export class Wiki extends DurableObject<WikiEnvironment> {
         true,
         accepted.length ? "" : "duplicate: already accepted",
       ]);
-      for (const published of accepted) this.#broadcast(published);
+      for (const published of accepted) {
+        this.#broadcast(published);
+      }
       return;
     }
     if (message[0] === "REQ" || message[0] === "CLOSE") {
@@ -106,10 +114,17 @@ export class Wiki extends DurableObject<WikiEnvironment> {
           this.ctx.storage.kv.get<Subscription[]>(key) ?? []
         ).filter((sub) => sub.id !== id);
         // Remove a replaced subscription before validation. A failed REQ closes it.
-        if (subscriptions.length) this.ctx.storage.kv.put(key, subscriptions);
-        else this.ctx.storage.kv.delete(key);
-        if (message[0] === "CLOSE") return;
-        if (message.length < 3) throw new Error("invalid: REQ needs filters");
+        if (subscriptions.length) {
+          this.ctx.storage.kv.put(key, subscriptions);
+        } else {
+          this.ctx.storage.kv.delete(key);
+        }
+        if (message[0] === "CLOSE") {
+          return;
+        }
+        if (message.length < 3) {
+          throw new Error("invalid: REQ needs filters");
+        }
         const filters = message.slice(2).map(parseFilter);
         const events = queryEvents(this.ctx.storage.sql, filters);
         try {
@@ -118,14 +133,17 @@ export class Wiki extends DurableObject<WikiEnvironment> {
           throw new Error("error: unable to store subscription state");
         }
         try {
-          if ((await this.ctx.storage.getAlarm()) === null)
+          if ((await this.ctx.storage.getAlarm()) === null) {
             await this.ctx.storage.setAlarm(
               Date.now() + subscriptionCleanupInterval,
             );
+          }
         } catch (error) {
           console.error("Unable to schedule subscription cleanup Alarm", error);
         }
-        for (const event of events) this.#send(socket, ["EVENT", id, event]);
+        for (const event of events) {
+          this.#send(socket, ["EVENT", id, event]);
+        }
         this.#send(socket, ["EOSE", id]);
       } catch (error) {
         this.#send(socket, [
@@ -153,11 +171,15 @@ export class Wiki extends DurableObject<WikiEnvironment> {
     for (const [key] of this.ctx.storage.kv.list({
       prefix: "subscriptions:",
     })) {
-      if (connections.has(key)) remaining = true;
-      else this.ctx.storage.kv.delete(key);
+      if (connections.has(key)) {
+        remaining = true;
+      } else {
+        this.ctx.storage.kv.delete(key);
+      }
     }
-    if (remaining)
+    if (remaining) {
       await this.ctx.storage.setAlarm(Date.now() + subscriptionCleanupInterval);
+    }
   }
 
   webSocketClose(socket: WebSocket): void {
@@ -184,8 +206,9 @@ export class Wiki extends DurableObject<WikiEnvironment> {
 
   #send(socket: WebSocket, message: unknown[]): void {
     // A disconnected peer must not turn an already committed edit into a rejection.
-    if (socket.readyState === WebSocket.OPEN)
+    if (socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(message));
+    }
   }
 
   #broadcast(event: Event): void {
@@ -196,8 +219,9 @@ export class Wiki extends DurableObject<WikiEnvironment> {
           `subscriptions:${connection.id}`,
         ) ?? [];
       for (const sub of subscriptions) {
-        if (sub.filters.some((filter) => matches(event, filter)))
+        if (sub.filters.some((filter) => matches(event, filter))) {
           this.#send(socket, ["EVENT", sub.id, event]);
+        }
       }
     }
   }

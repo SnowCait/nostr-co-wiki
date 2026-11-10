@@ -17,7 +17,9 @@ export async function acceptRevision(
   ip: string,
 ): Promise<Event[]> {
   const key = decode(privateKey);
-  if (key.type !== "nsec") throw new Error("Wiki signing key must be nsec");
+  if (key.type !== "nsec") {
+    throw new Error("Wiki signing key must be nsec");
+  }
   const pubkey = getPublicKey(key.data);
   const d = revisionTarget(revision, pubkey);
   const base = revision.tags.find((tag) => tag[0] === "e")?.[1];
@@ -25,8 +27,9 @@ export async function acceptRevision(
     const article = storage.sql
       .exec<ArticleState>("SELECT * FROM articles WHERE d = ?", d)
       .toArray()[0];
-    if (article && article.is_published !== 1)
+    if (article && article.is_published !== 1) {
       throw new Error("blocked: article is unpublished");
+    }
     if (
       storage.sql
         .exec(
@@ -34,15 +37,17 @@ export async function acceptRevision(
           hexToBytes(revision.id),
         )
         .toArray().length
-    )
+    ) {
       return [];
+    }
     const previous = article
       ? eventById(storage.sql, article.head_commit_id)
       : null;
-    if (previous?.id !== base)
+    if (previous?.id !== base) {
       throw new Error(
         "blocked: edit conflict (base Commit does not match current article)",
       );
+    }
     const published = article?.published_event_id
       ? eventById(storage.sql, article.published_event_id)
       : null;
@@ -95,11 +100,12 @@ export async function acceptRevision(
         now,
       );
       insertEvent(storage.sql, commit, d, hexToBytes(revision.id), seq);
-      if (article?.published_event_id)
+      if (article?.published_event_id) {
         storage.sql.exec(
           "DELETE FROM events WHERE id = ?",
           article.published_event_id,
         );
+      }
       insertEvent(storage.sql, articleEvent, d);
       storage.sql.exec(
         `INSERT INTO articles (d, head_commit_id, published_event_id, is_published) VALUES (?, ?, ?, 1)
