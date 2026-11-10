@@ -64,7 +64,7 @@ test(
         url.pathname = '/';
         return relay.fetch(new Request(url, request), env);
       }
-      return web.fetch(request, { ...env, RELAY_URL: url.origin.replace(/^http/, 'ws') + '/__relay' }, ctx);
+      return web.fetch(request, env, ctx);
     }};
   `,
     );
