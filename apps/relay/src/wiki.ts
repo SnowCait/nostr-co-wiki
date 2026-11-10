@@ -1,15 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Event } from "nostr-tools/pure";
+import type { Filter } from "nostr-tools/filter";
 import { acceptRevision } from "./revision";
 import { getArticle, getHistory, queryEvents } from "./query";
 import { schema } from "./schema";
-import {
-  matches,
-  parseFilter,
-  record,
-  signedEvent,
-  type Filter,
-} from "./protocol";
+import { matches, parseFilter, record, signedEvent } from "./protocol";
 
 interface Connection {
   ip: string;

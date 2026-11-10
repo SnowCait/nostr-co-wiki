@@ -1,12 +1,6 @@
-import type { Event } from "nostr-tools/pure";
-import {
-  parseFilter,
-  matches,
-  newestFirst,
-  searchRank,
-  searchText,
-  type Filter,
-} from "./protocol";
+import { compareEvents, type Event } from "nostr-tools/pure";
+import type { Filter } from "nostr-tools/filter";
+import { parseFilter, matches, searchRank, searchText } from "./protocol";
 
 export function getArticle(sql: SqlStorage, d: string): Event | null {
   return (
@@ -90,15 +84,15 @@ export function queryEvents(sql: SqlStorage, filters: Filter[]): Event[] {
       .filter((event) => matches(event, filter));
     events.sort(
       query === undefined
-        ? newestFirst
+        ? compareEvents
         : (a, b) =>
-            searchRank(a, query) - searchRank(b, query) || newestFirst(a, b),
+            searchRank(a, query) - searchRank(b, query) || compareEvents(a, b),
     );
     for (const event of events.slice(0, filter.limit))
       results.set(event.id, event);
   }
   const events = [...results.values()];
   return filters.every((filter) => filter.search === undefined)
-    ? events.sort(newestFirst)
+    ? events.sort(compareEvents)
     : events;
 }

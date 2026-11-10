@@ -1,4 +1,6 @@
-import { verifyEvent, type Event } from "nostr-tools/pure";
+import { validateEvent, verifyEvent, type Event } from "nostr-tools/pure";
+import { matchFilter, type Filter } from "nostr-tools/filter";
+import { isHex32 } from "nostr-tools/utils";
 
 function normalizeIdentifier(value: string): string {
   return value
@@ -7,19 +9,6 @@ function normalizeIdentifier(value: string): string {
     .replace(/[^\p{L}\p{N}\p{M}-]/gu, "")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
-}
-
-export const hexId = /^[0-9a-f]{64}$/;
-
-export interface Filter {
-  ids?: string[];
-  authors?: string[];
-  kinds?: number[];
-  since?: number;
-  until?: number;
-  limit?: number;
-  search?: string;
-  [tag: `#${string}`]: string[];
 }
 
 export function record(value: unknown): value is Record<string, unknown> {
@@ -33,23 +22,15 @@ function integer(value: unknown): value is number {
 export function signedEvent(value: unknown): Event {
   if (
     !record(value) ||
+    !validateEvent(value) ||
     typeof value.id !== "string" ||
-    !hexId.test(value.id) ||
-    typeof value.pubkey !== "string" ||
-    !hexId.test(value.pubkey) ||
+    !isHex32(value.id) ||
     typeof value.sig !== "string" ||
     !/^[0-9a-f]{128}$/.test(value.sig) ||
     !integer(value.created_at) ||
     !integer(value.kind) ||
     value.kind > 65535 ||
-    typeof value.content !== "string" ||
-    !Array.isArray(value.tags) ||
-    !value.tags.every(
-      (tag) =>
-        Array.isArray(tag) &&
-        tag.length > 0 &&
-        tag.every((part) => typeof part === "string"),
-    )
+    value.tags.some((tag) => tag.length === 0)
   )
     throw new Error("invalid: malformed event");
   // Copy only NIP-01 fields; verification caches and extra fields are never trusted.
@@ -82,7 +63,7 @@ export function revisionTarget(event: Event, wikiPubkey: string): string {
   if (!d || normalizeIdentifier(d) !== d)
     throw new Error("invalid: article identifier");
   const base = event.tags.find((tag) => tag[0] === "e")?.[1];
-  if (base !== undefined && !hexId.test(base))
+  if (base !== undefined && !isHex32(base))
     throw new Error("invalid: base Commit ID");
   return d;
 }
@@ -104,8 +85,7 @@ export function parseFilter(value: unknown): Filter {
           key === "kinds"
             ? integer(item) && item <= 65535
             : typeof item === "string" &&
-              (!["ids", "authors", "#e", "#p"].includes(key) ||
-                (item.length === 64 && hexId.test(item))),
+              (!["ids", "authors", "#e", "#p"].includes(key) || isHex32(item)),
         )
       )
         throw new Error(`invalid: ${key} filter`);
@@ -142,33 +122,11 @@ export function searchRank(event: Event, query: string): number {
 }
 
 export function matches(event: Event, filter: Filter): boolean {
-  if (filter.ids && !filter.ids.includes(event.id)) return false;
-  if (filter.authors && !filter.authors.includes(event.pubkey)) return false;
-  if (filter.kinds && !filter.kinds.includes(event.kind)) return false;
-  if (filter.since !== undefined && event.created_at < filter.since)
-    return false;
-  if (filter.until !== undefined && event.created_at > filter.until)
-    return false;
-  for (const [key, values] of Object.entries(filter)) {
-    if (
-      key.startsWith("#") &&
-      !event.tags.some(
-        (tag) =>
-          tag[0] === key.slice(1) && (values as string[]).includes(tag[1]),
-      )
-    )
-      return false;
-  }
   return (
-    filter.search === undefined ||
-    Number.isFinite(searchRank(event, searchText(filter.search)))
+    matchFilter(filter, event) &&
+    // nostr-tools 2.26.0 treats until: 0 as an absent bound.
+    (filter.until !== 0 || event.created_at <= 0) &&
+    (filter.search === undefined ||
+      Number.isFinite(searchRank(event, searchText(filter.search))))
   );
-}
-
-export function newestFirst(a: Event, b: Event): number {
-  return b.created_at - a.created_at || a.id.localeCompare(b.id);
-}
-
-export function bytes(hex: string): Uint8Array<ArrayBuffer> {
-  return Uint8Array.from(hex.match(/../g)!, (pair) => parseInt(pair, 16));
 }

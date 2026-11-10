@@ -1,6 +1,7 @@
 import { decode } from "nostr-tools/nip19";
 import { finalizeEvent, getPublicKey, type Event } from "nostr-tools/pure";
-import { bytes, revisionTarget } from "./protocol";
+import { hexToBytes } from "nostr-tools/utils";
+import { revisionTarget } from "./protocol";
 
 type ArticleState = {
   id: number;
@@ -30,7 +31,7 @@ export async function acceptRevision(
       storage.sql
         .exec(
           "SELECT id FROM events WHERE kind = 3818 AND ref_event_id = ?",
-          bytes(revision.id),
+          hexToBytes(revision.id),
         )
         .toArray().length
     )
@@ -89,11 +90,11 @@ export async function acceptRevision(
       insertEvent(storage.sql, revision, d);
       storage.sql.exec(
         "INSERT INTO event_receipts (revision_id, ip_address, received_at) VALUES (?, ?, ?)",
-        bytes(revision.id),
+        hexToBytes(revision.id),
         ip,
         now,
       );
-      insertEvent(storage.sql, commit, d, bytes(revision.id), seq);
+      insertEvent(storage.sql, commit, d, hexToBytes(revision.id), seq);
       if (article?.published_event_id)
         storage.sql.exec(
           "DELETE FROM events WHERE id = ?",
@@ -104,8 +105,8 @@ export async function acceptRevision(
         `INSERT INTO articles (d, head_commit_id, published_event_id, is_published) VALUES (?, ?, ?, 1)
          ON CONFLICT(d) DO UPDATE SET head_commit_id = excluded.head_commit_id, published_event_id = excluded.published_event_id`,
         d,
-        bytes(commit.id),
-        bytes(articleEvent.id),
+        hexToBytes(commit.id),
+        hexToBytes(articleEvent.id),
       );
       const id = storage.sql
         .exec<{ id: number }>("SELECT id FROM articles WHERE d = ?", d)
@@ -140,9 +141,9 @@ function insertEvent(
 ): void {
   sql.exec(
     "INSERT INTO events (id, kind, pubkey, created_at, article_d, ref_event_id, seq, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    bytes(event.id),
+    hexToBytes(event.id),
     event.kind,
-    bytes(event.pubkey),
+    hexToBytes(event.pubkey),
     event.created_at,
     d,
     ref,
