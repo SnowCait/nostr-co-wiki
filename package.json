@@ -10,17 +10,16 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "npm run build --workspace @nostr-co-wiki/web && node scripts/dev.js",
-    "dev:web": "npm run dev --workspace @nostr-co-wiki/web",
-    "dev:relay": "npm run dev --workspace @nostr-co-wiki/relay",
+    "dev:web": "npm run build --workspace @nostr-co-wiki/web && wrangler dev -c apps/web/wrangler.json --port 8787 --var RELAY_URL:ws://localhost:8788/",
+    "dev:relay": "npm run dev --workspace @nostr-co-wiki/relay -- --port 8788",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run check && npm run build && node --test tests/*.test.js apps/relay/tests/*.test.js",
     "types": "npm run types --workspaces --if-present",
     "check": "npm run types && npm run check --workspaces --if-present",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write \"{apps,tests,packages,scripts}/**/*.{js,ts,svelte,html,css}\" eslint.config.js",
-    "format:check": "prettier --check \"{apps,tests,packages,scripts}/**/*.{js,ts,svelte,html,css}\" eslint.config.js",
+    "format": "prettier --write \"{apps,tests,packages}/**/*.{js,ts,svelte,html,css}\" eslint.config.js",
+    "format:check": "prettier --check \"{apps,tests,packages}/**/*.{js,ts,svelte,html,css}\" eslint.config.js",
     "types:check": "npm run types:check --workspaces --if-present"
   },
   "devDependencies": {

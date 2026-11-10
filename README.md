@@ -2,16 +2,27 @@
 
 Requires Node.js 24 or later and npm.
 
+Install dependencies with `npm install` and configure the Wiki signing key as
+described below. Start each Worker in its own terminal.
+
+Terminal 1:
+
 ```sh
-npm install
-npm run dev
+npm run dev:relay
 ```
 
-Open http://localhost:8787. This builds the SvelteKit Web Worker, then starts
-Web and Relay in separate Wrangler processes. The Relay listens at
-`ws://localhost:8788/`. Wrangler's local registry connects the Web binding to the
-Relay-owned SQLite Wiki Durable Object. Ctrl+C stops both processes. Restart the
-command after changing Web code. No Cloudflare account is required for local development.
+Terminal 2:
+
+```sh
+npm run dev:web
+```
+
+Open http://localhost:8787. The Relay listens at `ws://localhost:8788/`.
+The Web command builds SvelteKit and starts the Cloudflare Worker runtime.
+Wrangler's local registry connects the Web binding to the Relay-owned SQLite
+Wiki Durable Object. Ctrl+C stops the Worker in that terminal independently.
+Restart `npm run dev:web` after changing Web code. No Cloudflare account is
+required for local development.
 
 ```sh
 npm exec playwright -- install chromium
@@ -41,8 +52,8 @@ set the Wiki signing key in `apps/relay/.dev.vars` (an ignored file):
 WIKI_PRIVATE_KEY=<the Wiki's nsec1... private key>
 ```
 
-After this required key setup, `npm run dev` starts the full public Wiki. Tests
-inject fixture keys and require no credentials.
+After this required key setup, start both commands above. Tests inject fixture
+keys and require no credentials.
 
 The Web Worker's `WIKI` binding accesses the same object through
 `env.WIKI.getByName("wiki")`. Its `getArticle(d)` method returns the latest public
@@ -61,7 +72,7 @@ signing extension; reading and search do not. Editor previews and server-rendere
 articles use the same Djot renderer and HTML sanitizer. A successful Relay response
 confirms acceptance; the editor checks the published Article before navigating.
 
-The development startup injects `RELAY_URL:ws://localhost:8788/` into the Web
+`npm run dev:web` injects `RELAY_URL:ws://localhost:8788/` into the Web
 Worker through Wrangler's `--var` option. The Wrangler configuration contains no
 default Relay URL, and an unset or invalid value produces a configuration error
 on creation/editing pages; it never falls back to localhost. For deployment,
@@ -82,7 +93,3 @@ cannot run the bundled browser, point `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` at a
 compatible installed Chromium when running `npm test`. CI installs its supported
 Chromium and system dependencies. Tests use fixture signing keys and no external
 signing service or Cloudflare credentials.
-
-The development-startup test runs the actual `npm run dev` command in an isolated
-workspace and checks browser posting, shared Article state, SSR, and SIGINT
-shutdown. Stop development servers on ports 8787 and 8788 before running `npm test`.
