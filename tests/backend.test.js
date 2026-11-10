@@ -483,7 +483,7 @@ test(
               5000,
             );
             native.addEventListener("close", resolve, { once: true });
-            native.close(1000);
+            native.close();
           });
           assert.equal(closed.code, 1000);
           assert.equal(closed.wasClean, true);

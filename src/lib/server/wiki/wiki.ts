@@ -191,9 +191,9 @@ export class Wiki extends DurableObject<WikiEnvironment> {
     }
   }
 
-  webSocketClose(socket: WebSocket, code: number, reason: string): void {
+  webSocketClose(socket: WebSocket): void {
     this.#deleteSubscriptions(socket);
-    socket.close(code, reason);
+    socket.close(1000);
   }
 
   webSocketError(socket: WebSocket): void {
