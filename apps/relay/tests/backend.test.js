@@ -51,15 +51,18 @@ async function connection(worker, t) {
   const socket = response.webSocket;
   socket.accept();
   t.after(() => {
-    if (socket.readyState === WebSocket.OPEN) socket.close();
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.close();
+    }
   });
   const inbox = [];
   const waiters = [];
   socket.addEventListener("message", (event) => {
     const message = JSON.parse(event.data);
     const index = waiters.findIndex((waiter) => waiter.predicate(message));
-    if (index < 0) inbox.push(message);
-    else {
+    if (index < 0) {
+      inbox.push(message);
+    } else {
       const [waiter] = waiters.splice(index, 1);
       clearTimeout(waiter.timer);
       waiter.resolve(message);
@@ -73,7 +76,9 @@ async function connection(worker, t) {
     },
     next(predicate) {
       const index = inbox.findIndex(predicate);
-      if (index >= 0) return Promise.resolve(inbox.splice(index, 1)[0]);
+      if (index >= 0) {
+        return Promise.resolve(inbox.splice(index, 1)[0]);
+      }
       return new Promise((resolve, reject) => {
         const waiter = {
           predicate,
@@ -108,7 +113,9 @@ async function query(client, ...filters) {
   for (;;) {
     const message = await client.next((message) => message[1] === id);
     assert.notEqual(message[0], "CLOSED", JSON.stringify(message));
-    if (message[0] === "EOSE") break;
+    if (message[0] === "EOSE") {
+      break;
+    }
     assert.equal(message[0], "EVENT");
     events.push(message[2]);
   }
@@ -182,11 +189,12 @@ test("event validation rejects malformed fields and never trusts an incoming ver
     { pubkey: 123 },
     { id: valid.id.toUpperCase() },
     { sig: "A".repeat(128) },
-  ])
+  ]) {
     assert.throws(
       () => signedEvent({ ...valid, ...fields }),
       /invalid: malformed event/,
     );
+  }
 });
 
 test(
@@ -322,7 +330,9 @@ test(
         });
         for (let attempt = 0; attempt < 1000; attempt++) {
           const state = await this.alarmState();
-          if (state.runs > before.runs) return state;
+          if (state.runs > before.runs) {
+            return state;
+          }
           await delay(10);
         }
         assert.fail("Alarm handler did not complete");
@@ -365,8 +375,9 @@ test(
           "articles",
           "article_fts",
           "event_receipts",
-        ])
+        ]) {
           assert.ok(tables.some((row) => row.name === name));
+        }
         const indexes = await db.exec(
           "SELECT name FROM sqlite_master WHERE type = 'index'",
         );
@@ -374,8 +385,9 @@ test(
           "events_article_history",
           "events_commit_revision",
           "events_kind_time",
-        ])
+        ]) {
           assert.ok(indexes.some((row) => row.name === name));
+        }
         assert.equal(
           (await db.exec("PRAGMA table_info(events)")).find(
             (row) => row.name === "id",
@@ -420,10 +432,12 @@ test(
         await client.next((message) => message[0] === "EOSE");
         const scheduled = (await wiki.alarmState()).scheduled;
         assert.ok(scheduled >= before + day && scheduled <= Date.now() + day);
-        for (const id of ["alarm-first", "alarm-second", "alarm-third"])
+        for (const id of ["alarm-first", "alarm-second", "alarm-third"]) {
           client.send(["REQ", id, { kinds: [2818], limit: 0 }]);
-        for (let i = 0; i < 3; i++)
+        }
+        for (let i = 0; i < 3; i++) {
           await client.next((message) => message[0] === "EOSE");
+        }
         assert.equal((await wiki.alarmState()).scheduled, scheduled);
         assert.deepEqual(
           (await wiki.subscriptionState())[0][1].map((sub) => sub.id),
@@ -434,8 +448,9 @@ test(
           "alarm-first",
           "alarm-second",
           "alarm-third",
-        ])
+        ]) {
           client.send(["CLOSE", id]);
+        }
         // A subsequent request is a barrier after all CLOSE messages.
         client.send(["UNKNOWN"]);
         await client.next((message) => message[0] === "NOTICE");
@@ -590,7 +605,9 @@ test(
         assert.equal(firstArticle.content, first.content);
         assert.equal(tag(firstArticle, "title"), "Nostr");
         assert.equal(tag(firstArticle, "summary"), "A protocol overview");
-        for (const event of [first, commit, firstArticle]) verify(event);
+        for (const event of [first, commit, firstArticle]) {
+          verify(event);
+        }
         assert.equal(history[0].revision.id, first.id);
         const receipts = await db.exec(
           "SELECT lower(hex(revision_id)) AS id, ip_address, received_at FROM event_receipts",
@@ -750,17 +767,19 @@ test(
           "articles",
           "article_fts",
           "event_receipts",
-        ])
+        ]) {
           before[table] = await db.exec(`SELECT count(*) AS n FROM ${table}`);
+        }
         await db.exec(`CREATE TRIGGER fail_publication BEFORE INSERT ON events WHEN NEW.kind = 30818
       BEGIN SELECT RAISE(ABORT, 'publication failure'); END`);
         const event = revision("atomic", undefined, "atomic content");
         assert.equal((await publish(client, event))[2], false);
-        for (const table of Object.keys(before))
+        for (const table of Object.keys(before)) {
           assert.deepEqual(
             await db.exec(`SELECT count(*) AS n FROM ${table}`),
             before[table],
           );
+        }
         const previous = await wiki.getArticle("nostr");
         const failedUpdate = revision(
           "nostr",
@@ -769,11 +788,12 @@ test(
         );
         assert.equal((await publish(client, failedUpdate))[2], false);
         assert.deepEqual(await wiki.getArticle("nostr"), previous);
-        for (const table of Object.keys(before))
+        for (const table of Object.keys(before)) {
           assert.deepEqual(
             await db.exec(`SELECT count(*) AS n FROM ${table}`),
             before[table],
           );
+        }
         assert.equal(await wiki.getArticle("atomic"), null);
         assert.deepEqual(await wiki.getHistory("atomic"), []);
         await db.exec("DROP TRIGGER fail_publication");
@@ -814,8 +834,9 @@ test(
           { kinds: [] },
           { "#a": [] },
           { limit: 0 },
-        ])
+        ]) {
           assert.deepEqual(await query(client, filter), []);
+        }
         assert.deepEqual(
           (
             await query(client, {
@@ -950,8 +971,9 @@ test(
         for (let attempt = 0; attempt < 100; attempt++) {
           if (
             !(await wiki.subscriptionState()).some(([entry]) => entry === key)
-          )
+          ) {
             break;
+          }
           await delay(10);
         }
         assert.equal(

@@ -41,10 +41,14 @@ export function queryEvents(sql: SqlStorage, filters: Filter[]): Event[] {
   const results = new Map<string, Event>();
   for (const input of filters) {
     const filter = parseFilter(input);
-    if (filter.limit === 0) continue;
+    if (filter.limit === 0) {
+      continue;
+    }
     const query =
       filter.search === undefined ? undefined : searchText(filter.search);
-    if (query !== undefined && [...query].length < 3) continue;
+    if (query !== undefined && [...query].length < 3) {
+      continue;
+    }
     let statement =
       query === undefined
         ? `SELECT e.data FROM events e JOIN articles a ON a.d = e.article_d WHERE a.is_published = 1`
@@ -63,20 +67,25 @@ export function queryEvents(sql: SqlStorage, filters: Filter[]): Event[] {
     const constrain = (column: string, literals: string[]) => {
       const constraint = ` AND ${column} IN (${literals.join(",")})`;
       // SQL is ASCII here. Larger lists are still checked by matches() below.
-      if (statement.length + constraint.length <= 100_000)
+      if (statement.length + constraint.length <= 100_000) {
         statement += constraint;
+      }
     };
-    if (filter.kinds) constrain("e.kind", filter.kinds.map(String));
-    if (filter.ids)
+    if (filter.kinds) {
+      constrain("e.kind", filter.kinds.map(String));
+    }
+    if (filter.ids) {
       constrain(
         "e.id",
         filter.ids.map((id) => `X'${id}'`),
       );
-    if (filter.authors)
+    }
+    if (filter.authors) {
       constrain(
         "e.pubkey",
         filter.authors.map((author) => `X'${author}'`),
       );
+    }
     const rows = sql.exec<{ data: string }>(statement, ...bindings);
     const events = rows
       .toArray()
@@ -88,8 +97,9 @@ export function queryEvents(sql: SqlStorage, filters: Filter[]): Event[] {
         : (a, b) =>
             searchRank(a, query) - searchRank(b, query) || compareEvents(a, b),
     );
-    for (const event of events.slice(0, filter.limit))
+    for (const event of events.slice(0, filter.limit)) {
       results.set(event.id, event);
+    }
   }
   const events = [...results.values()];
   return filters.every((filter) => filter.search === undefined)

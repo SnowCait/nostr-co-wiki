@@ -31,4 +31,7 @@ export default defineConfig(
       parserOptions: { parser: ts.parser },
     },
   },
+  {
+    rules: { curly: ["error", "all"] },
+  },
 );

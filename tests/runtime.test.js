@@ -25,7 +25,9 @@ test(
           try {
             process.kill(-child.pid, "SIGTERM");
           } catch (error) {
-            if (error.code !== "ESRCH") throw error;
+            if (error.code !== "ESRCH") {
+              throw error;
+            }
           }
           await stopped;
         }
@@ -105,9 +107,12 @@ test(
     });
     let response;
     for (let attempt = 0; attempt < 120; attempt++) {
-      if (spawnError) throw spawnError;
-      if (child.exitCode !== null || child.signalCode !== null)
+      if (spawnError) {
+        throw spawnError;
+      }
+      if (child.exitCode !== null || child.signalCode !== null) {
         throw new Error(output);
+      }
       try {
         response = await fetch("http://localhost:18787/");
         break;

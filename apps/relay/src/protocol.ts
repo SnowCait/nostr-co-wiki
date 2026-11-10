@@ -31,8 +31,9 @@ export function signedEvent(value: unknown): Event {
     !integer(value.kind) ||
     value.kind > 65535 ||
     value.tags.some((tag) => tag.length === 0)
-  )
+  ) {
     throw new Error("invalid: malformed event");
+  }
   // Copy only NIP-01 fields; verification caches and extra fields are never trusted.
   const event: Event = {
     id: value.id,
@@ -43,38 +44,51 @@ export function signedEvent(value: unknown): Event {
     content: value.content,
     tags: value.tags,
   };
-  if (!verifyEvent(event)) throw new Error("invalid: event ID or signature");
+  if (!verifyEvent(event)) {
+    throw new Error("invalid: event ID or signature");
+  }
   return event;
 }
 
 export function revisionTarget(event: Event, wikiPubkey: string): string {
-  if (event.kind !== 2818)
+  if (event.kind !== 2818) {
     throw new Error("blocked: only Wiki Revisions may be submitted");
+  }
   for (const name of ["a", "e", "title", "summary", "edit_summary"]) {
     const tags = event.tags.filter((tag) => tag[0] === name);
-    if (tags.length > 1 || tags.some((tag) => tag.length < 2))
+    if (tags.length > 1 || tags.some((tag) => tag.length < 2)) {
       throw new Error(`invalid: ${name} tag`);
+    }
   }
   const address = event.tags.find((tag) => tag[0] === "a")?.[1];
   const prefix = `30818:${wikiPubkey}:`;
-  if (!address?.startsWith(prefix))
+  if (!address?.startsWith(prefix)) {
     throw new Error("invalid: target Wiki address");
+  }
   const d = address.slice(prefix.length);
-  if (!d || normalizeIdentifier(d) !== d)
+  if (!d || normalizeIdentifier(d) !== d) {
     throw new Error("invalid: article identifier");
+  }
   const base = event.tags.find((tag) => tag[0] === "e")?.[1];
-  if (base !== undefined && !isHex32(base))
+  if (base !== undefined && !isHex32(base)) {
     throw new Error("invalid: base Commit ID");
+  }
   return d;
 }
 
 export function parseFilter(value: unknown): Filter {
-  if (!record(value)) throw new Error("invalid: filter must be an object");
+  if (!record(value)) {
+    throw new Error("invalid: filter must be an object");
+  }
   for (const [key, field] of Object.entries(value)) {
     if (["since", "until", "limit"].includes(key)) {
-      if (!integer(field)) throw new Error(`invalid: ${key} filter`);
+      if (!integer(field)) {
+        throw new Error(`invalid: ${key} filter`);
+      }
     } else if (key === "search") {
-      if (typeof field !== "string") throw new Error("invalid: search filter");
+      if (typeof field !== "string") {
+        throw new Error("invalid: search filter");
+      }
     } else if (
       ["ids", "authors", "kinds"].includes(key) ||
       /^#[a-zA-Z]$/.test(key)
@@ -87,9 +101,12 @@ export function parseFilter(value: unknown): Filter {
             : typeof item === "string" &&
               (!["ids", "authors", "#e", "#p"].includes(key) || isHex32(item)),
         )
-      )
+      ) {
         throw new Error(`invalid: ${key} filter`);
-    } else throw new Error(`unsupported: filter ${key}`);
+      }
+    } else {
+      throw new Error(`unsupported: filter ${key}`);
+    }
   }
   return value as Filter;
 }
@@ -103,7 +120,9 @@ export function searchText(search: string): string {
 }
 
 export function searchRank(event: Event, query: string): number {
-  if (event.kind !== 30818 || [...query].length < 3) return Infinity;
+  if (event.kind !== 30818 || [...query].length < 3) {
+    return Infinity;
+  }
   const fields = ["d", "title", "summary"].map(
     (name) => event.tags.find((tag) => tag[0] === name)?.[1] ?? "",
   );
