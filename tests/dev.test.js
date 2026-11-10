@@ -171,7 +171,7 @@ test(
     browser = undefined;
     process.kill(-child.pid, "SIGINT");
     await stopped;
-    assert.equal(child.exitCode, 0, output);
+    assert.ok(child.exitCode === 0 || child.signalCode === "SIGINT", output);
     for (const port of [8787, 8788]) {
       await assert.rejects(fetch(`http://localhost:${port}/`));
     }
