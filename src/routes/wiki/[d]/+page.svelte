@@ -1,6 +1,6 @@
 <script lang="ts">
+  import ArticleNav from "#lib/components/ArticleNav.svelte";
   import RenderedArticle from "#lib/components/RenderedArticle.svelte";
-  import { resolve } from "$app/paths";
   import { tag, title, date } from "#lib/article.ts";
   import { refreshAll } from "$app/navigation";
   import { subscribeArticle } from "#lib/article-updates.ts";
@@ -28,20 +28,16 @@
     content={tag(data.article, "summary") ?? ""}
   /></svelte:head
 >
-{#if updated}<p role="status">
-    This article has been updated.
-    <button onclick={() => refreshAll()}>Show latest article</button>
-  </p>{/if}
 <h1>{title(data.article)}</h1>
 {#if tag(data.article, "summary")}<p class="summary">
     {tag(data.article, "summary")}
   </p>{/if}
-<nav aria-label="Article">
-  <a href={resolve("/wiki/[d]/edit", { d: tag(data.article, "d")! })}
-    >Edit article</a
-  ><a href={resolve("/wiki/[d]/history", { d: tag(data.article, "d")! })}
-    >Editing history</a
-  >
-</nav>
-<p><small>Published {date(data.article.created_at)}</small></p>
+<ArticleNav d={tag(data.article, "d")!} current="read" />
+<p class="metadata">
+  <small>Last updated {date(data.article.created_at)}</small>
+</p>
+{#if updated}<p class="notice" role="status">
+    This article has been updated.
+    <button onclick={() => refreshAll()}>Show latest article</button>
+  </p>{/if}
 <article class="prose"><RenderedArticle html={data.html} /></article>

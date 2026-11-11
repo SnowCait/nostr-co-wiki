@@ -11,11 +11,13 @@
 <ul class="article-list">
   {#each articles as article (article.id)}
     <li>
-      <a href={resolve("/wiki/[d]", { d: tag(article, "d")! })}
+      <a
+        class="article-list-title"
+        href={resolve("/wiki/[d]", { d: tag(article, "d")! })}
         >{title(article)}</a
       >
       {#if tag(article, "summary")}<p>{tag(article, "summary")}</p>{/if}
-      {#if showDate}<small>Updated {date(article.created_at)}</small>{/if}
+      {#if showDate}<small>Last updated {date(article.created_at)}</small>{/if}
     </li>
   {/each}
 </ul>
