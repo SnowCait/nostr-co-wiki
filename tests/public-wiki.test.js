@@ -546,20 +546,70 @@ test(
       0,
     );
     await reader.clock.pauseAt(new Date());
+    await readerContext.setOffline(true);
     await reader.evaluate(() => globalThis.updateSockets.at(-1).close());
+    const waitForClosedSocket = () =>
+      reader.evaluate(() => {
+        const socket = globalThis.updateSockets.at(-1);
+        if (socket.readyState === WebSocket.CLOSED) {
+          return;
+        }
+        return new Promise((resolve) =>
+          socket.addEventListener("close", resolve, { once: true }),
+        );
+      });
+    await waitForClosedSocket();
+    let attempts = await reader.evaluate(() => globalThis.updateSockets.length);
+    for (const delay of [1000, 2000, 4000, 8000, 16000, 30000, 30000]) {
+      await reader.clock.fastForward(delay - 1);
+      assert.equal(
+        await reader.evaluate(() => globalThis.updateSockets.length),
+        attempts,
+      );
+      await reader.clock.runFor(1);
+      assert.equal(
+        await reader.evaluate(() => globalThis.updateSockets.length),
+        ++attempts,
+      );
+      await waitForClosedSocket();
+    }
+    await readerContext.setOffline(false);
     assert.equal(
       (await publish(d, "Updated while disconnected", await currentHead()))
         .type,
       "accepted",
     );
-    await reader.clock.runFor(1000);
+    await reader.clock.fastForward(30000);
     await reader.clock.resume();
     await reader.getByRole("button", { name: "Show latest article" }).waitFor();
     assert.equal(
       await reader.locator("article").innerText(),
       "Live notification content",
     );
+    await reader.waitForFunction(() =>
+      globalThis.updateSockets.at(-1)?.messages.some((m) => m[0] === "EOSE"),
+    );
+    // A successful connection resets the next retry to one second.
+    await reader.clock.pauseAt(await reader.evaluate(() => Date.now()));
+    await reader.evaluate(() => globalThis.updateSockets.at(-1).close());
+    await waitForClosedSocket();
+    attempts = await reader.evaluate(() => globalThis.updateSockets.length);
+    await reader.clock.runFor(999);
+    assert.equal(
+      await reader.evaluate(() => globalThis.updateSockets.length),
+      attempts,
+    );
+    await reader.clock.runFor(1);
+    assert.equal(
+      await reader.evaluate(() => globalThis.updateSockets.length),
+      attempts + 1,
+    );
+    await reader.clock.resume();
+    await reader.waitForFunction(() =>
+      globalThis.updateSockets.at(-1)?.messages.some((m) => m[0] === "EOSE"),
+    );
     await reader.getByRole("link", { name: "NostrCoWiki" }).first().click();
+    await reader.waitForURL(base + "/");
     await reader.waitForFunction(() =>
       globalThis.updateSockets.every(
         (socket) => socket.readyState === WebSocket.CLOSED,
@@ -573,10 +623,29 @@ test(
     const connectionCount = await reader.evaluate(
       () => globalThis.updateSockets.length,
     );
-    await reader.clock.runFor(32000);
+    await reader.clock.fastForward(32000);
     assert.equal(
       await reader.evaluate(() => globalThis.updateSockets.length),
       connectionCount,
+    );
+    // Leaving while a retry is pending must cancel it as well.
+    await reader.goto(base + articlePath);
+    await reader.waitForFunction(() =>
+      globalThis.updateSockets.at(-1)?.messages.some((m) => m[0] === "EOSE"),
+    );
+    await reader.clock.pauseAt(await reader.evaluate(() => Date.now()));
+    await reader.evaluate(() => globalThis.updateSockets.at(-1).close());
+    await waitForClosedSocket();
+    await reader.clock.resume();
+    await reader.getByRole("link", { name: "NostrCoWiki" }).first().click();
+    await reader.waitForURL(base + "/");
+    const attemptsAfterLeaving = await reader.evaluate(
+      () => globalThis.updateSockets.length,
+    );
+    await reader.clock.fastForward(32000);
+    assert.equal(
+      await reader.evaluate(() => globalThis.updateSockets.length),
+      attemptsAfterLeaving,
     );
     await readerContext.close();
 

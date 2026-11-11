@@ -10,12 +10,13 @@ export function subscribeArticle(
 ): () => void {
   let socket: WebSocket;
   let stopped = false;
-  let retries = 0;
+  let retryDelay = 1000;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const subscription = "article-updates";
   function connect() {
     socket = new WebSocket(relay);
     socket.onopen = () => {
+      retryDelay = 1000;
       socket.send(
         JSON.stringify([
           "REQ",
@@ -58,9 +59,9 @@ export function subscribeArticle(
     };
     socket.onerror = () => socket.close();
     socket.onclose = () => {
-      // Keep the retry budget across connections, including short-lived ones.
-      if (!stopped && retries < 5) {
-        timer = setTimeout(connect, 1000 * 2 ** retries++);
+      if (!stopped) {
+        timer = setTimeout(connect, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 30000);
       }
     };
   }
