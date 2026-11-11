@@ -42,8 +42,8 @@ colocated unit tests in `src/`, Workers/SQLite/Relay integration tests in
 `tests/e2e/` with Playwright Test. Run these separately with `npm run test:unit`,
 `npm run test:integration`, and `npm run test:e2e` after building. The E2E runner
 stores results in `test-results/`; the screenshot scenario writes 22 full-page
-PNGs under its `ui-screenshots/` output directory. Download them from the CI run’s
-`ui-screenshots` Artifact.
+PNGs under its `ui-screenshots/` output directory. Download the complete
+`test-results/` directory from the CI run’s `playwright-test-results` Artifact.
 `npm run check` checks application and E2E types without building;
 `npm run check:e2e` checks E2E tests and Playwright configuration with `tsc --noEmit`. Use `npm run types` after changing
 Wrangler configuration; do not edit `worker-configuration.d.ts` manually.
