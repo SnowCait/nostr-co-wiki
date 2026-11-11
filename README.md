@@ -37,7 +37,9 @@ npm test
 ```
 
 `npm test` generates Worker types, checks TypeScript, builds SvelteKit, and runs
-Node integration tests against Workers, SQLite, WebSockets, and browser flows.
+colocated unit tests in `src/`, Workers/SQLite/Relay integration tests in
+`tests/integration/`, and browser scenarios in `tests/e2e/`, using Node’s test
+runner.
 `npm run check` checks types without building. Use `npm run types` after changing
 Wrangler configuration; do not edit `worker-configuration.d.ts` manually.
 

@@ -7,7 +7,7 @@ import { chromium } from "playwright";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { nsecEncode, npubEncode } from "nostr-tools/nip19";
 import { getToken } from "nostr-tools/nip98";
-import { createRevision, submitRevision } from "../src/lib/submission.ts";
+import { createRevision, submitRevision } from "../../src/lib/submission.ts";
 
 const viewports = [
   { name: "desktop-1440x900", width: 1440, height: 900 },

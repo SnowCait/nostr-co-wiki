@@ -9,7 +9,7 @@
     "dev": "npm run build && wrangler dev",
     "build": "vite build",
     "check": "npm run types && svelte-kit sync && svelte-check --tsconfig tsconfig.json",
-    "test": "npm run check && npm run build && node --test tests/*.test.js",
+    "test": "npm run check && npm run build && node --test \"src/**/*.test.js\" \"tests/**/*.test.js\"",
     "types": "wrangler types",
     "types:check": "wrangler types --check",
     "lint": "eslint .",
