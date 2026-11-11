@@ -255,6 +255,10 @@ test(
     await page.goto(base + articlePath + "/edit");
     await page.getByLabel("Title (required)").fill("Renamed title");
     await page.getByLabel("Djot source").fill("My preserved edit\n");
+    await page
+      .getByLabel("Summary (optional)", { exact: true })
+      .fill("Draft summary");
+    await page.getByLabel("Edit summary (optional)").fill("Draft edit summary");
     await page.evaluate(() => {
       globalThis.nostr.signEvent = async () => {
         throw new Error("Declined");
@@ -274,6 +278,31 @@ test(
     assert.equal(
       (await publish(d, "Another editor's update\n", firstCommit))["type"],
       "accepted",
+    );
+    await page
+      .getByText("This article has been updated.", { exact: false })
+      .waitFor();
+    assert.equal(
+      await page.getByLabel("Title (required)").inputValue(),
+      "Renamed title",
+    );
+    assert.equal(
+      await page.getByLabel("Djot source").inputValue(),
+      "My preserved edit\n",
+    );
+    assert.equal(
+      await page.getByLabel("Summary (optional)", { exact: true }).inputValue(),
+      "Draft summary",
+    );
+    assert.equal(
+      await page.getByLabel("Edit summary (optional)").inputValue(),
+      "Draft edit summary",
+    );
+    assert.equal(
+      await page
+        .getByRole("link", { name: "View latest article in a new tab" })
+        .getAttribute("target"),
+      "_blank",
     );
     await page
       .getByRole("button", { name: "Sign and submit Revision" })
@@ -435,6 +464,135 @@ test(
       true,
     );
     assert.equal(await page.locator('a[href="/wiki/ranking"]').count(), 0);
+    // Track actual browser connections to check resubscription and route cleanup.
+    const reader = await context.newPage();
+    reader.on("pageerror", (error) => failures.push(error.message));
+    await reader.addInitScript(() => {
+      globalThis.updateSockets = [];
+      const NativeWebSocket = globalThis.WebSocket;
+      globalThis.WebSocket = class extends NativeWebSocket {
+        constructor(url) {
+          super(url);
+          globalThis.updateSockets.push(this);
+          this.messages = [];
+          this.sent = [];
+          this.addEventListener("message", ({ data }) =>
+            this.messages.push(JSON.parse(data)),
+          );
+        }
+        send(data) {
+          this.sent.push(JSON.parse(data));
+          super.send(data);
+        }
+      };
+    });
+    await reader.goto(base + articlePath);
+    await reader.waitForFunction(() =>
+      globalThis.updateSockets.at(-1)?.messages.some((m) => m[0] === "EOSE"),
+    );
+    assert.equal(
+      await reader.getByRole("button", { name: "Show latest article" }).count(),
+      0,
+    );
+    const displayed = (await info(d)).article;
+    const unrelated = finalizeEvent(
+      {
+        ...displayed,
+        tags: [
+          ["d", "another-article"],
+          ["head", "a".repeat(64)],
+        ],
+      },
+      key,
+    );
+    await reader.evaluate(
+      (events) => {
+        const socket = globalThis.updateSockets.at(-1);
+        for (const event of events) {
+          socket.dispatchEvent(
+            new MessageEvent("message", {
+              data: JSON.stringify(["EVENT", "article-updates", event]),
+            }),
+          );
+        }
+      },
+      [unrelated, { ...displayed, id: "0".repeat(64) }, { kind: 30818 }],
+    );
+    assert.equal(
+      await reader.getByRole("button", { name: "Show latest article" }).count(),
+      0,
+    );
+    const currentHead = async () =>
+      (await info(d)).article.tags.find((tag) => tag[0] === "head")[1];
+    assert.equal(
+      (await publish(d, "Live notification content", await currentHead())).type,
+      "accepted",
+    );
+    await reader.getByRole("button", { name: "Show latest article" }).waitFor();
+    assert.match(await reader.locator("article").innerText(), /First source/);
+    await reader.getByRole("button", { name: "Show latest article" }).click();
+    await reader
+      .getByText("Live notification content", { exact: true })
+      .waitFor();
+    await reader.waitForFunction(() =>
+      globalThis.updateSockets.at(-1)?.messages.some((m) => m[0] === "EOSE"),
+    );
+    assert.equal(
+      await reader.getByRole("button", { name: "Show latest article" }).count(),
+      0,
+    );
+    await reader.clock.install();
+    await reader.clock.pauseAt(new Date());
+    await reader.evaluate(() => globalThis.updateSockets.at(-1).close());
+    assert.equal(
+      (await publish(d, "Updated while disconnected", await currentHead()))
+        .type,
+      "accepted",
+    );
+    await reader.clock.runFor(1000);
+    await reader.clock.resume();
+    await reader.getByRole("button", { name: "Show latest article" }).waitFor();
+    assert.equal(
+      await reader.locator("article").innerText(),
+      "Live notification content",
+    );
+    await reader.getByRole("link", { name: "NostrCoWiki" }).first().click();
+    await reader.waitForFunction(() =>
+      globalThis.updateSockets.every(
+        (socket) => socket.readyState === WebSocket.CLOSED,
+      ),
+    );
+    assert.ok(
+      await reader.evaluate(() =>
+        globalThis.updateSockets.at(-1).sent.some((m) => m[0] === "CLOSE"),
+      ),
+    );
+    const connectionCount = await reader.evaluate(
+      () => globalThis.updateSockets.length,
+    );
+    await reader.clock.runFor(32000);
+    assert.equal(
+      await reader.evaluate(() => globalThis.updateSockets.length),
+      connectionCount,
+    );
+    // An SSR response can become stale before its browser subscription starts.
+    await reader.route(base + articlePath, async (route) => {
+      const response = await route.fetch();
+      assert.equal(
+        (await publish(d, "Updated before subscribing", await currentHead()))
+          .type,
+        "accepted",
+      );
+      await route.fulfill({ response });
+    });
+    await reader.goto(base + articlePath);
+    await reader.getByRole("button", { name: "Show latest article" }).waitFor();
+    assert.equal(
+      await reader.locator("article").innerText(),
+      "Updated while disconnected",
+    );
+    await reader.close();
+
     const rejected = await publish("ranking", "not allowed");
     assert.equal(rejected.type, "rejected");
     const connectionFailure = await submitRevision(
