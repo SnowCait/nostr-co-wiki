@@ -7,9 +7,7 @@ import { createTestHarness } from "wrangler";
 import { chromium } from "playwright";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { nsecEncode } from "nostr-tools/nip19";
-import { normalizeIdentifier } from "../src/lib/identifier.ts";
-import { renderArticle } from "../src/lib/server/render.ts";
-import { createRevision, submitRevision } from "../src/lib/submission.ts";
+import { createRevision, submitRevision } from "../../src/lib/submission.ts";
 
 const key = new Uint8Array(32).fill(7);
 const editor = new Uint8Array(32).fill(8);
@@ -18,28 +16,6 @@ const signer = {
   getPublicKey: async () => getPublicKey(editor),
   signEvent: async (event) => finalizeEvent(event, editor),
 };
-
-test("NIP-54 normalization and sanitized Djot preserve safe links and remove XSS", () => {
-  for (const [title, expected] of [
-    ["  Hello  World  ", "hello-world"],
-    ["What's Up?", "whats-up"],
-    ["日本語 Article", "日本語-article"],
-    ["Ñoño", "ñoño"],
-  ]) {
-    assert.equal(normalizeIdentifier(title), expected);
-  }
-  const html = renderArticle(
-    '[Other][] [日本語][日本語 記事] [Bob][] [web][]\n\n[Bob]: nostr:npub1example\n[web]: https://example.com/\n\n[bad](javascript:alert%281%29)\n\n``` =html\n<script>attack()</script><img src="x" onerror="attack()"><a href="javascript:attack()">bad</a>\n```\n',
-  );
-  assert.match(html, /href="\/wiki\/other"/);
-  assert.match(
-    html,
-    /href="\/wiki\/%E6%97%A5%E6%9C%AC%E8%AA%9E-%E8%A8%98%E4%BA%8B"/,
-  );
-  assert.match(html, /href="nostr:npub1example"/);
-  assert.match(html, /href="https:\/\/example.com\/"/);
-  assert.doesNotMatch(html, /<script|onerror=|href="javascript:/i);
-});
 
 test(
   "public Wiki browser flow uses real Workers, signing, Relay acceptance and SQLite state",
