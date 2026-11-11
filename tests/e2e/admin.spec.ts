@@ -1,51 +1,57 @@
+import type { Filter } from "nostr-tools/filter";
+import type { Event, EventTemplate } from "nostr-tools/pure";
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createTestHarness } from "wrangler";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { getToken } from "nostr-tools/nip98";
 import { nsecEncode, npubEncode } from "nostr-tools/nip19";
-import { chromium } from "playwright";
 
 const wikiKey = new Uint8Array(32).fill(11);
 const adminKey = new Uint8Array(32).fill(12);
 const editorKey = new Uint8Array(32).fill(13);
 const pubkey = getPublicKey(wikiKey);
-const sign = (event) => finalizeEvent(event, adminKey);
+const sign = (event: EventTemplate) => finalizeEvent(event, adminKey);
 
-test(
-  "administration authenticates requests, controls publication, and serves management routes",
-  { timeout: 180000 },
-  async (t) => {
-    const config = JSON.parse(await readFile("wrangler.json", "utf8"));
-    const options = {
-      workers: [
-        {
-          secrets: { WIKI_PRIVATE_KEY: nsecEncode(wikiKey) },
-          config: {
-            ...config,
-            main: resolve("worker.js"),
-            assets: {
-              ...config.assets,
-              directory: resolve(".svelte-kit/cloudflare"),
-            },
-            vars: { ADMIN_PUBLIC_KEY: npubEncode(getPublicKey(adminKey)) },
+test("administration authenticates requests, controls publication, and serves management routes", async ({
+  page,
+}) => {
+  const config = JSON.parse(await readFile("wrangler.json", "utf8"));
+  const options = {
+    workers: [
+      {
+        secrets: { WIKI_PRIVATE_KEY: nsecEncode(wikiKey) },
+        config: {
+          ...config,
+          main: resolve("worker.js"),
+          assets: {
+            ...config.assets,
+            directory: resolve(".svelte-kit/cloudflare"),
           },
+          vars: { ADMIN_PUBLIC_KEY: npubEncode(getPublicKey(adminKey)) },
         },
-      ],
-    };
-    const server = createTestHarness(options);
-    let browser;
-    t.after(async () => {
-      await browser?.close();
-      await server.close();
-    });
+      },
+    ],
+  };
+  const server = createTestHarness(options);
+  let socket: WebSocket | undefined;
+  try {
     const { url } = await server.listen();
     const api = url.origin + "/api/admin/articles";
-    const auth = async (url = api, method = "GET", payload, signer = sign) =>
-      getToken(url, method, signer, true, payload);
-    const call = async (method = "GET", suffix = "", payload, authorization) =>
+    const auth = async (
+      url = api,
+      method = "GET",
+      payload?: { published: boolean },
+      signer = sign,
+    ) => getToken(url, method, signer, true, payload);
+    const call = async (
+      method = "GET",
+      suffix = "",
+      payload?: { published: boolean },
+      authorization?: string,
+    ) =>
       server.getWorker("nostr-co-wiki").fetch(api + suffix, {
         method,
         headers: {
@@ -77,17 +83,23 @@ test(
     ]) {
       assert.equal((await call("GET", "", undefined, token)).status, 401);
     }
-    const socket = new WebSocket(url.origin.replace("http", "ws") + "/relay");
+    socket = new WebSocket(url.origin.replace("http", "ws") + "/relay");
     await new Promise((resolve, reject) => {
-      socket.onopen = resolve;
-      socket.onerror = reject;
+      socket!.onopen = resolve;
+      socket!.onerror = reject;
     });
-    const messages = [];
-    socket.addEventListener("message", (event) =>
+    type RelayMessage =
+      | ["EVENT", string, Event]
+      | ["EOSE", string]
+      | ["OK", string, boolean, string]
+      | ["CLOSED", string, string]
+      | ["NOTICE", string];
+    const messages: RelayMessage[] = [];
+    socket!.addEventListener("message", (event) =>
       messages.push(JSON.parse(event.data)),
     );
-    const next = (predicate) =>
-      new Promise((resolve, reject) => {
+    const next = (predicate: (message: RelayMessage) => boolean) =>
+      new Promise<RelayMessage>((resolve, reject) => {
         const timer = setTimeout(
           () => reject(new Error("Missing Relay response")),
           5000,
@@ -96,15 +108,14 @@ test(
           const i = messages.findIndex(predicate);
           if (i >= 0) {
             clearTimeout(timer);
-            socket.removeEventListener("message", find);
+            socket!.removeEventListener("message", find);
             resolve(messages.splice(i, 1)[0]);
           }
         };
-        socket.addEventListener("message", find);
+        socket!.addEventListener("message", find);
         find();
       });
-    t.after(() => socket.close());
-    const revision = (base) =>
+    const revision = (base?: string) =>
       finalizeEvent(
         {
           kind: 2818,
@@ -119,7 +130,7 @@ test(
         editorKey,
       );
     const event = revision();
-    socket.send(JSON.stringify(["EVENT", event]));
+    socket!.send(JSON.stringify(["EVENT", event]));
     assert.equal((await next((m) => m[0] === "OK"))[2], true);
     const db = await server
       .getWorker("nostr-co-wiki")
@@ -127,11 +138,12 @@ test(
     const before = await db.exec(
       "SELECT id FROM events WHERE kind IN (2818,3818) ORDER BY id",
     );
-    const article = (await (await call()).json())[0];
+    type AdminArticle = { d: string; published: boolean; article: Event };
+    const article = ((await (await call()).json()) as AdminArticle[])[0];
     assert.equal(article.published, true);
-    const head = article.article.tags.find((tag) => tag[0] === "head")[1];
-    const query = async (filter) => {
-      socket.send(JSON.stringify(["REQ", "check", filter]));
+    const head = article.article.tags.find((tag) => tag[0] === "head")![1];
+    const query = async (filter: Filter) => {
+      socket!.send(JSON.stringify(["REQ", "check", filter]));
       await next((m) => m[0] === "EOSE" && m[1] === "check");
       const events = messages
         .filter((m) => m[0] === "EVENT" && m[1] === "check")
@@ -156,8 +168,9 @@ test(
       200,
     );
     assert.equal(
-      (await (await call()).json()).find((item) => item.d === "administration")
-        .article.content,
+      ((await (await call()).json()) as AdminArticle[]).find(
+        (item) => item.d === "administration",
+      )!.article.content,
       event.content,
     );
     assert.equal(
@@ -166,7 +179,7 @@ test(
     );
     assert.equal((await query({})).length, 0);
     assert.equal((await query({ search: "Administration" })).length, 0);
-    socket.send(JSON.stringify(["EVENT", revision(head)]));
+    socket!.send(JSON.stringify(["EVENT", revision(head)]));
     assert.equal((await next((m) => m[0] === "OK"))[2], false);
     assert.equal(
       (await call("PUT", "?d=administration", { published: true })).status,
@@ -201,17 +214,13 @@ test(
       (await server.fetch("http://example.workers.dev/admin")).status,
       200,
     );
-    browser = await chromium.launch({
-      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
-    });
-    const page = await browser.newPage();
-    const failures = [];
+    const failures: string[] = [];
     page.on("pageerror", (error) => failures.push(error.message));
     await page.goto(url.origin + "/admin");
     await page
       .getByText("Waiting for a NIP-07 signing extension.", { exact: false })
       .waitFor();
-    await page.exposeFunction("signUnauthorized", (event) =>
+    await page.exposeFunction("signUnauthorized", (event: EventTemplate) =>
       finalizeEvent(event, editorKey),
     );
     await page.exposeFunction("signAdmin", sign);
@@ -251,11 +260,13 @@ test(
         exact: true,
       })
       .waitFor();
-    assert.equal(
-      await page.getByRole("button", { name: "View content" }).count(),
-      0,
-    );
+    await expect(
+      page.getByRole("button", { name: "View content" }),
+    ).toHaveCount(0);
     assert.deepEqual(failures, []);
     assert.equal((await fetch(url.origin + "/")).status, 200);
-  },
-);
+  } finally {
+    socket?.close();
+    await server.close();
+  }
+});

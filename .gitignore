@@ -7,4 +7,4 @@ node_modules/
 .dev.vars.*
 !.dev.vars.example
 
-/artifacts/ui-screenshots/
+/test-results/

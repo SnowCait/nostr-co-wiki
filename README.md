@@ -38,9 +38,14 @@ npm test
 
 `npm test` generates Worker types, checks TypeScript, builds SvelteKit, and runs
 colocated unit tests in `src/`, Workers/SQLite/Relay integration tests in
-`tests/integration/`, and browser scenarios in `tests/e2e/`, using Node’s test
-runner.
-`npm run check` checks types without building. Use `npm run types` after changing
+`tests/integration/` with Node’s test runner, then browser scenarios in
+`tests/e2e/` with Playwright Test. Run these separately with `npm run test:unit`,
+`npm run test:integration`, and `npm run test:e2e` after building. The E2E runner
+stores results in `test-results/`; the screenshot scenario writes 22 full-page
+PNGs under its `ui-screenshots/` output directory. Download the complete
+`test-results/` directory from the CI run’s `playwright-test-results` Artifact.
+`npm run check` checks application and E2E types without building;
+`npm run check:e2e` checks E2E tests and Playwright configuration with `tsc --noEmit`. Use `npm run types` after changing
 Wrangler configuration; do not edit `worker-configuration.d.ts` manually.
 
 `npm run build` uses the Cloudflare adapter. `worker.js` re-exports its generated
