@@ -229,6 +229,11 @@ test(
       true,
     );
     await page.goto(base + articlePath + "/edit");
+    // Signing is enabled after Editor mounts; avoid filling the SSR input during hydration.
+    await page
+      .getByRole("button", { name: "Sign and submit Revision" })
+      .and(page.locator(":enabled"))
+      .waitFor();
     await page.getByLabel("Title (required)").fill("Renamed title");
     await page.getByLabel("Djot source").fill("My preserved edit\n");
     await page
