@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { subscribeArticle } from "#lib/article-updates.ts";
   import RenderedArticle from "#lib/components/RenderedArticle.svelte";
   import { resolve } from "$app/paths";
   import { onMount, untrack } from "svelte";
@@ -40,6 +41,7 @@
   let notice = $state("");
   let outcome = $state("");
   let acceptedId = $state("");
+  let updated = $state(false);
   let latest = $state<Event | null>(null);
   onMount(() => {
     origin = window.location.origin;
@@ -122,6 +124,23 @@
       controller.abort();
     };
   });
+  $effect(() => {
+    const commit = base;
+    updated = false;
+    if (!commit) {
+      return;
+    }
+    return subscribeArticle(
+      data.relayUrl,
+      data.wikiPubkey,
+      data.d,
+      (article) => {
+        if (tag(article, "head") !== commit) {
+          updated = true;
+        }
+      },
+    );
+  });
   async function checkPublication() {
     busy = true;
     try {
@@ -201,6 +220,12 @@
 {#if !signingAvailable}<p role="status">
     Waiting for a NIP-07 compatible signing extension. One is required to create
     or edit articles. Reading remains available.
+  </p>{/if}
+{#if updated}<p role="status">
+    This article has been updated. Your draft and base Commit are unchanged.
+    <a href={resolve("/wiki/[d]", { d })} target="_blank" rel="noopener"
+      >View latest article in a new tab</a
+    >
   </p>{/if}
 <form onsubmit={submit}>
   <fieldset disabled={busy || !!acceptedId}>
