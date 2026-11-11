@@ -465,7 +465,11 @@ test(
     );
     assert.equal(await page.locator('a[href="/wiki/ranking"]').count(), 0);
     // Track actual browser connections to check resubscription and route cleanup.
-    const reader = await context.newPage();
+    const readerContext = await browser.newContext({
+      extraHTTPHeaders: { "CF-Connecting-IP": "203.0.113.42" },
+    });
+    const reader = await readerContext.newPage();
+    await reader.clock.install();
     reader.on("pageerror", (error) => failures.push(error.message));
     await reader.addInitScript(() => {
       globalThis.updateSockets = [];
@@ -541,7 +545,6 @@ test(
       await reader.getByRole("button", { name: "Show latest article" }).count(),
       0,
     );
-    await reader.clock.install();
     await reader.clock.pauseAt(new Date());
     await reader.evaluate(() => globalThis.updateSockets.at(-1).close());
     assert.equal(
@@ -575,29 +578,31 @@ test(
       await reader.evaluate(() => globalThis.updateSockets.length),
       connectionCount,
     );
-    await reader.close();
+    await readerContext.close();
 
-    // Capture stale SSR content before allowing the initial subscription.
+    // Publish after mounting but before the first REQ reaches the real Relay.
     const lateReader = await context.newPage();
     lateReader.on("pageerror", (error) => failures.push(error.message));
-    let delayedResponse = false;
-    await lateReader.route(
-      (url) => decodeURIComponent(url.pathname) === "/wiki/" + d,
-      async (route) => {
-        const response = await route.fetch();
-        const body = await response.text();
-        assert.match(body, /Updated while disconnected/);
-        assert.equal(
-          (await publish(d, "Updated before subscribing", await currentHead()))
-            .type,
-          "accepted",
-        );
-        delayedResponse = true;
-        await route.fulfill({ response, body });
-      },
-    );
+    await lateReader.exposeFunction("beforeSubscription", async () => {
+      assert.equal(
+        (await publish(d, "Updated before subscribing", await currentHead()))
+          .type,
+        "accepted",
+      );
+    });
+    await lateReader.addInitScript(() => {
+      const NativeWebSocket = globalThis.WebSocket;
+      globalThis.WebSocket = class extends NativeWebSocket {
+        send(data) {
+          if (JSON.parse(data)[0] === "REQ") {
+            globalThis.beforeSubscription().then(() => super.send(data));
+          } else {
+            super.send(data);
+          }
+        }
+      };
+    });
     await lateReader.goto(base + articlePath);
-    assert.equal(delayedResponse, true);
     await lateReader
       .getByRole("button", { name: "Show latest article" })
       .waitFor();
