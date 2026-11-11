@@ -575,23 +575,37 @@ test(
       await reader.evaluate(() => globalThis.updateSockets.length),
       connectionCount,
     );
-    // An SSR response can become stale before its browser subscription starts.
-    await reader.route(base + articlePath, async (route) => {
-      const response = await route.fetch();
-      assert.equal(
-        (await publish(d, "Updated before subscribing", await currentHead()))
-          .type,
-        "accepted",
-      );
-      await route.fulfill({ response });
-    });
-    await reader.goto(base + articlePath);
-    await reader.getByRole("button", { name: "Show latest article" }).waitFor();
+    await reader.close();
+
+    // Capture stale SSR content before allowing the initial subscription.
+    const lateReader = await context.newPage();
+    lateReader.on("pageerror", (error) => failures.push(error.message));
+    let delayedResponse = false;
+    await lateReader.route(
+      (url) => decodeURIComponent(url.pathname) === "/wiki/" + d,
+      async (route) => {
+        const response = await route.fetch();
+        const body = await response.text();
+        assert.match(body, /Updated while disconnected/);
+        assert.equal(
+          (await publish(d, "Updated before subscribing", await currentHead()))
+            .type,
+          "accepted",
+        );
+        delayedResponse = true;
+        await route.fulfill({ response, body });
+      },
+    );
+    await lateReader.goto(base + articlePath);
+    assert.equal(delayedResponse, true);
+    await lateReader
+      .getByRole("button", { name: "Show latest article" })
+      .waitFor();
     assert.equal(
-      await reader.locator("article").innerText(),
+      await lateReader.locator("article").innerText(),
       "Updated while disconnected",
     );
-    await reader.close();
+    await lateReader.close();
 
     const rejected = await publish("ranking", "not allowed");
     assert.equal(rejected.type, "rejected");
