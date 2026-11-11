@@ -1,27 +1,38 @@
+import type { BrowserContext } from "@playwright/test";
+import type { ArticleResponse } from "../../src/lib/article.ts";
+import type { Event, EventTemplate } from "nostr-tools/pure";
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, expect } from "@playwright/test";
 import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createTestHarness } from "wrangler";
-import { chromium } from "playwright";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { nsecEncode } from "nostr-tools/nip19";
 import { createRevision, submitRevision } from "../../src/lib/submission.ts";
+
+test.use({
+  extraHTTPHeaders: { "CF-Connecting-IP": "203.0.113.42" },
+  viewport: { width: 390, height: 844 },
+});
 
 const key = new Uint8Array(32).fill(7);
 const editor = new Uint8Array(32).fill(8);
 const pubkey = getPublicKey(key);
 const signer = {
   getPublicKey: async () => getPublicKey(editor),
-  signEvent: async (event) => finalizeEvent(event, editor),
+  signEvent: async (event: EventTemplate) => finalizeEvent(event, editor),
 };
 
-test(
-  "public Wiki browser flow uses real Workers, signing, Relay acceptance and SQLite state",
-  { timeout: 180000 },
-  async (t) => {
-    const directory = await mkdtemp(join(tmpdir(), "nostr-public-"));
+test("public Wiki browser flow uses real Workers, signing, Relay acceptance and SQLite state", async ({
+  browser,
+  context,
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "nostr-public-"));
+  let server: ReturnType<typeof createTestHarness> | undefined;
+  let readerContext: BrowserContext | undefined;
+  try {
     const webConfig = JSON.parse(await readFile("wrangler.json", "utf8"));
     const entry = join(directory, "web.js");
     await writeFile(
@@ -51,16 +62,7 @@ test(
         },
       ],
     };
-    const server = createTestHarness(options);
-    let browser;
-    t.after(async () => {
-      try {
-        await browser?.close();
-        await server.close();
-      } finally {
-        await rm(directory, { recursive: true, force: true });
-      }
-    });
+    server = createTestHarness(options);
     const { url } = await server.listen();
     const base = url.origin;
     assert.match(
@@ -76,14 +78,19 @@ test(
     const db = await server
       .getWorker("nostr-co-wiki")
       .getDurableObjectStorage("Wiki", { name: "wiki" });
-    const request = (path, options = {}) =>
+    const request = (path: string, options: RequestInit = {}) =>
       fetch(base + path, {
         ...options,
         headers: { "CF-Connecting-IP": "203.0.113.42", ...options.headers },
       });
-    const info = async (d) =>
+    const info = async (d: string): Promise<ArticleResponse> =>
       (await request("/api/article?d=" + encodeURIComponent(d))).json();
-    const publish = (d, content, articleBase, title = d) =>
+    const publish = (
+      d: string,
+      content: string,
+      articleBase?: string,
+      title = d,
+    ) =>
       submitRevision(
         signer,
         relayUrl,
@@ -97,27 +104,16 @@ test(
           wikiPubkey: pubkey,
         }),
       );
-    browser = await chromium.launch({
-      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
-    });
-    const context = await browser.newContext({
-      extraHTTPHeaders: { "CF-Connecting-IP": "203.0.113.42" },
-      viewport: { width: 390, height: 844 },
-    });
-    const page = await context.newPage();
-    const failures = [];
+    const failures: string[] = [];
     page.on("websocket", (socket) => assert.equal(socket.url(), relayUrl));
     page.on("pageerror", (error) => failures.push(error.message));
     await page.goto(base);
     assert.match(await page.content(), /No published articles yet/);
     await page.getByRole("link", { name: "Create article" }).first().click();
     await page.getByLabel("Title (required)").fill("Draft");
-    assert.equal(
-      await page
-        .getByRole("button", { name: "Sign and submit Revision" })
-        .isDisabled(),
-      true,
-    );
+    await expect(
+      page.getByRole("button", { name: "Sign and submit Revision" }),
+    ).toBeDisabled();
     assert.match(
       await page.content(),
       /Waiting for a NIP-07 compatible signing extension/,
@@ -125,12 +121,9 @@ test(
     await page
       .getByText("This identifier is available.", { exact: false })
       .waitFor();
-    assert.equal(
-      await page
-        .getByRole("button", { name: "Sign and submit Revision" })
-        .isDisabled(),
-      true,
-    );
+    await expect(
+      page.getByRole("button", { name: "Sign and submit Revision" }),
+    ).toBeDisabled();
     await page.getByRole("link", { name: "NostrCoWiki" }).first().click();
     await page.getByRole("link", { name: "Create article" }).first().click();
     await page.getByLabel("Title (required)").fill("Draft");
@@ -138,12 +131,9 @@ test(
       .getByText("This identifier is available.", { exact: false })
       .waitFor();
     await page.waitForTimeout(3200);
-    assert.equal(
-      await page
-        .getByRole("button", { name: "Sign and submit Revision" })
-        .isDisabled(),
-      true,
-    );
+    await expect(
+      page.getByRole("button", { name: "Sign and submit Revision" }),
+    ).toBeDisabled();
     await page.exposeFunction("signForTest", signer.signEvent);
     await page.evaluate(() => {
       globalThis.nostr = {
@@ -153,7 +143,8 @@ test(
     });
     await page.waitForFunction(
       () =>
-        globalThis.document.querySelector("form button")?.disabled === false,
+        globalThis.document.querySelector<HTMLButtonElement>("form button")
+          ?.disabled === false,
     );
     await page.addInitScript(() => {
       globalThis.nostr = {
@@ -169,16 +160,13 @@ test(
     await page.getByLabel("Edit summary (optional)").fill("Create article");
     await page.getByLabel("Title (required)").fill("Temporary title");
     await page.getByLabel("Title (required)").fill("日本語 Article");
-    assert.equal(
-      await page.getByLabel("Djot source").inputValue(),
+    await expect(page.getByLabel("Djot source")).toHaveValue(
       "First source\n\n[Other][]",
     );
-    assert.equal(
-      await page.getByLabel("Summary (optional)", { exact: true }).inputValue(),
-      "Japanese summary",
-    );
-    assert.equal(
-      await page.getByLabel("Edit summary (optional)").inputValue(),
+    await expect(
+      page.getByLabel("Summary (optional)", { exact: true }),
+    ).toHaveValue("Japanese summary");
+    await expect(page.getByLabel("Edit summary (optional)")).toHaveValue(
       "Create article",
     );
     await page
@@ -211,7 +199,7 @@ test(
     const first = (await info(d)).article;
     assert.ok(first);
     assert.equal(first.pubkey, pubkey);
-    const firstCommit = first.tags.find((tag) => tag[0] === "head")[1];
+    const firstCommit = first.tags.find((tag) => tag[0] === "head")![1];
     const ssr = await (await request(articlePath)).text();
     assert.match(ssr, /First source/);
     assert.match(ssr, /Japanese summary/);
@@ -222,12 +210,9 @@ test(
     await page
       .getByText("This article already exists.", { exact: false })
       .waitFor();
-    assert.equal(
-      await page
-        .getByRole("button", { name: "Sign and submit Revision" })
-        .isDisabled(),
-      true,
-    );
+    await expect(
+      page.getByRole("button", { name: "Sign and submit Revision" }),
+    ).toBeDisabled();
     await page.goto(base + articlePath + "/edit");
     // Signing is enabled after Editor mounts; avoid filling the SSR input during hydration.
     await page
@@ -249,8 +234,7 @@ test(
       .getByRole("button", { name: "Sign and submit Revision" })
       .click();
     await page.getByText("Signing was declined", { exact: false }).waitFor();
-    assert.equal(
-      await page.getByLabel("Djot source").inputValue(),
+    await expect(page.getByLabel("Djot source")).toHaveValue(
       "My preserved edit\n",
     );
     await page.evaluate(() => {
@@ -263,28 +247,21 @@ test(
     await page
       .getByText("This article has been updated.", { exact: false })
       .waitFor();
-    assert.equal(
-      await page.getByLabel("Title (required)").inputValue(),
+    await expect(page.getByLabel("Title (required)")).toHaveValue(
       "Renamed title",
     );
-    assert.equal(
-      await page.getByLabel("Djot source").inputValue(),
+    await expect(page.getByLabel("Djot source")).toHaveValue(
       "My preserved edit\n",
     );
-    assert.equal(
-      await page.getByLabel("Summary (optional)", { exact: true }).inputValue(),
-      "Draft summary",
-    );
-    assert.equal(
-      await page.getByLabel("Edit summary (optional)").inputValue(),
+    await expect(
+      page.getByLabel("Summary (optional)", { exact: true }),
+    ).toHaveValue("Draft summary");
+    await expect(page.getByLabel("Edit summary (optional)")).toHaveValue(
       "Draft edit summary",
     );
-    assert.equal(
-      await page
-        .getByRole("link", { name: "View latest article in a new tab" })
-        .getAttribute("target"),
-      "_blank",
-    );
+    await expect(
+      page.getByRole("link", { name: "View latest article in a new tab" }),
+    ).toHaveAttribute("target", "_blank");
     await page
       .getByRole("button", { name: "Sign and submit Revision" })
       .click();
@@ -294,8 +271,7 @@ test(
     await page
       .getByRole("button", { name: "Use this Commit as base" })
       .waitFor();
-    assert.equal(
-      await page.getByLabel("Djot source").inputValue(),
+    await expect(page.getByLabel("Djot source")).toHaveValue(
       "My preserved edit\n",
     );
     await page.getByRole("button", { name: "Use this Commit as base" }).click();
@@ -313,13 +289,10 @@ test(
     assert.match(await page.content(), /First source/);
     await page.locator(".diff .added").first().waitFor();
     await page.getByRole("link", { name: "Restore this content" }).click();
-    assert.equal(
-      await page.getByLabel("Djot source").inputValue(),
-      first.content,
-    );
-    const restoreBase = (await info(d)).article.tags.find(
+    await expect(page.getByLabel("Djot source")).toHaveValue(first.content);
+    const restoreBase = (await info(d)).article!.tags.find(
       (tag) => tag[0] === "head",
-    )[1];
+    )![1];
     assert.equal(
       (await publish(d, "A newer edit during restoration", restoreBase)).type,
       "accepted",
@@ -330,30 +303,27 @@ test(
     await page
       .getByRole("button", { name: "Use this Commit as base" })
       .waitFor();
-    assert.equal(
-      await page.getByLabel("Djot source").inputValue(),
-      first.content,
-    );
+    await expect(page.getByLabel("Djot source")).toHaveValue(first.content);
     await page.getByRole("button", { name: "Use this Commit as base" }).click();
     await page
       .getByRole("button", { name: "Sign and submit Revision" })
       .click();
     await page.waitForURL(base + articlePath);
     assert.match(await page.content(), /First source/);
-    const history = await db.exec(
+    const history = await db.exec<{ data: string }>(
       "SELECT data FROM events WHERE kind = 3818 AND article_d = ? ORDER BY seq",
       d,
     );
     assert.equal(history.length, 5);
     assert.equal(JSON.parse(history[0].data).id, firstCommit);
-    const restoredRevision = JSON.parse(
+    const restoredRevision: Event = JSON.parse(
       (
-        await db.exec(
+        await db.exec<{ data: string }>(
           "SELECT data FROM events WHERE id = ?",
           Buffer.from(
-            JSON.parse(history.at(-1).data).tags.find(
-              (tag) => tag[0] === "e",
-            )[1],
+            JSON.parse(history.at(-1)!.data).tags.find(
+              (tag: string[]) => tag[0] === "e",
+            )![1],
             "hex",
           ),
         )
@@ -361,8 +331,8 @@ test(
     );
     assert.equal(restoredRevision.content, first.content);
     assert.equal(
-      restoredRevision.tags.find((tag) => tag[0] === "e")[1],
-      JSON.parse(history.at(-2).data).id,
+      restoredRevision.tags.find((tag) => tag[0] === "e")![1],
+      JSON.parse(history.at(-2)!.data).id,
     );
     // Differencing must show both removals and additions for the second Revision.
     const secondCommit = JSON.parse(history[1].data).id;
@@ -376,7 +346,7 @@ test(
       (await publish("ranking-guide", "partial match")).type,
       "accepted",
     );
-    const links = (html) =>
+    const links = (html: string) =>
       [...html.matchAll(/href="([^"]*)"/g)].map(
         (match) => new URL(match[1], base + "/search").pathname,
       );
@@ -387,11 +357,11 @@ test(
       searchLinks.indexOf("/wiki/ranking") <
         searchLinks.indexOf("/wiki/ranking-guide"),
     );
-    const rpcSearch = async (q) =>
+    const rpcSearch = async (q: string): Promise<Event[]> =>
       (await request("/__search?q=" + encodeURIComponent(q))).json();
     const ranked = await rpcSearch("ranking");
     assert.deepEqual(
-      ranked.map((event) => event.tags.find((tag) => tag[0] === "d")[1]),
+      ranked.map((event) => event.tags.find((tag) => tag[0] === "d")![1]),
       ["ranking", "ranking-guide"],
     );
     assert.ok(
@@ -400,8 +370,10 @@ test(
     assert.deepEqual(await rpcSearch("日"), []);
     const home = await (await request("/")).text();
     const published = (
-      await db.exec("SELECT data FROM events WHERE kind = 30818")
-    ).map((row) => JSON.parse(row.data));
+      await db.exec<{ data: string }>(
+        "SELECT data FROM events WHERE kind = 30818",
+      )
+    ).map((row): Event => JSON.parse(row.data));
     published.sort(
       (a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id),
     );
@@ -410,7 +382,7 @@ test(
       published.map(
         (event) =>
           "/wiki/" +
-          encodeURIComponent(event.tags.find((tag) => tag[0] === "d")[1]),
+          encodeURIComponent(event.tags.find((tag) => tag[0] === "d")![1]),
       ),
     );
     // Hiding uses the existing DB state solely as a test fixture, not an admin API.
@@ -438,15 +410,12 @@ test(
     await page.goto(base + "/new");
     await page.getByLabel("Title (required)").fill("Ranking");
     await page.getByText("This URL is unavailable.").waitFor();
-    assert.equal(
-      await page
-        .getByRole("button", { name: "Sign and submit Revision" })
-        .isDisabled(),
-      true,
-    );
-    assert.equal(await page.locator('a[href="/wiki/ranking"]').count(), 0);
+    await expect(
+      page.getByRole("button", { name: "Sign and submit Revision" }),
+    ).toBeDisabled();
+    await expect(page.locator('a[href="/wiki/ranking"]')).toHaveCount(0);
     // Track actual browser connections to check resubscription and route cleanup.
-    const readerContext = await browser.newContext({
+    readerContext = await browser.newContext({
       extraHTTPHeaders: { "CF-Connecting-IP": "203.0.113.42" },
     });
     const reader = await readerContext.newPage();
@@ -456,7 +425,9 @@ test(
       globalThis.updateSockets = [];
       const NativeWebSocket = globalThis.WebSocket;
       globalThis.WebSocket = class extends NativeWebSocket {
-        constructor(url) {
+        declare messages: unknown[][];
+        declare sent: unknown[][];
+        constructor(url: string | URL) {
           super(url);
           globalThis.updateSockets.push(this);
           this.messages = [];
@@ -465,7 +436,7 @@ test(
             this.messages.push(JSON.parse(data)),
           );
         }
-        send(data) {
+        send(data: string) {
           this.sent.push(JSON.parse(data));
           super.send(data);
         }
@@ -475,11 +446,10 @@ test(
     await reader.waitForFunction(() =>
       globalThis.updateSockets.at(-1)?.messages.some((m) => m[0] === "EOSE"),
     );
-    assert.equal(
-      await reader.getByRole("button", { name: "Show latest article" }).count(),
-      0,
-    );
-    const displayed = (await info(d)).article;
+    await expect(
+      reader.getByRole("button", { name: "Show latest article" }),
+    ).toHaveCount(0);
+    const displayed = (await info(d)).article!;
     const unrelated = finalizeEvent(
       {
         ...displayed,
@@ -492,7 +462,7 @@ test(
     );
     await reader.evaluate(
       (events) => {
-        const socket = globalThis.updateSockets.at(-1);
+        const socket = globalThis.updateSockets.at(-1)!;
         for (const event of events) {
           socket.dispatchEvent(
             new MessageEvent("message", {
@@ -503,12 +473,11 @@ test(
       },
       [unrelated, { ...displayed, id: "0".repeat(64) }, { kind: 30818 }],
     );
-    assert.equal(
-      await reader.getByRole("button", { name: "Show latest article" }).count(),
-      0,
-    );
+    await expect(
+      reader.getByRole("button", { name: "Show latest article" }),
+    ).toHaveCount(0);
     const currentHead = async () =>
-      (await info(d)).article.tags.find((tag) => tag[0] === "head")[1];
+      (await info(d)).article!.tags.find((tag) => tag[0] === "head")![1];
     assert.equal(
       (await publish(d, "Live notification content", await currentHead())).type,
       "accepted",
@@ -522,21 +491,20 @@ test(
     await reader.waitForFunction(() =>
       globalThis.updateSockets.at(-1)?.messages.some((m) => m[0] === "EOSE"),
     );
-    assert.equal(
-      await reader.getByRole("button", { name: "Show latest article" }).count(),
-      0,
-    );
+    await expect(
+      reader.getByRole("button", { name: "Show latest article" }),
+    ).toHaveCount(0);
     await reader.clock.pauseAt(new Date());
     await readerContext.setOffline(true);
-    await reader.evaluate(() => globalThis.updateSockets.at(-1).close());
+    await reader.evaluate(() => globalThis.updateSockets.at(-1)!.close());
     const waitForClosedSocket = () =>
       reader.evaluate(() => {
-        const socket = globalThis.updateSockets.at(-1);
+        const socket = globalThis.updateSockets.at(-1)!;
         if (socket.readyState === WebSocket.CLOSED) {
           return;
         }
-        return new Promise((resolve) =>
-          socket.addEventListener("close", resolve, { once: true }),
+        return new Promise<void>((resolve) =>
+          socket.addEventListener("close", () => resolve(), { once: true }),
         );
       });
     await waitForClosedSocket();
@@ -572,7 +540,7 @@ test(
     );
     // A successful connection resets the next retry to one second.
     await reader.clock.pauseAt(await reader.evaluate(() => Date.now()));
-    await reader.evaluate(() => globalThis.updateSockets.at(-1).close());
+    await reader.evaluate(() => globalThis.updateSockets.at(-1)!.close());
     await waitForClosedSocket();
     attempts = await reader.evaluate(() => globalThis.updateSockets.length);
     await reader.clock.runFor(999);
@@ -598,7 +566,7 @@ test(
     );
     assert.ok(
       await reader.evaluate(() =>
-        globalThis.updateSockets.at(-1).sent.some((m) => m[0] === "CLOSE"),
+        globalThis.updateSockets.at(-1)!.sent.some((m) => m[0] === "CLOSE"),
       ),
     );
     const connectionCount = await reader.evaluate(
@@ -615,7 +583,7 @@ test(
       globalThis.updateSockets.at(-1)?.messages.some((m) => m[0] === "EOSE"),
     );
     await reader.clock.pauseAt(await reader.evaluate(() => Date.now()));
-    await reader.evaluate(() => globalThis.updateSockets.at(-1).close());
+    await reader.evaluate(() => globalThis.updateSockets.at(-1)!.close());
     await waitForClosedSocket();
     await reader.clock.resume();
     await reader.getByRole("link", { name: "NostrCoWiki" }).first().click();
@@ -643,7 +611,7 @@ test(
     await lateReader.addInitScript(() => {
       const NativeWebSocket = globalThis.WebSocket;
       globalThis.WebSocket = class extends NativeWebSocket {
-        send(data) {
+        send(data: string) {
           if (JSON.parse(data)[0] === "REQ") {
             globalThis.beforeSubscription().then(() => super.send(data));
           } else {
@@ -685,7 +653,7 @@ test(
     assert.match(
       await (
         await request(
-          articlePath + "/history/" + JSON.parse(history.at(-1).data).id,
+          articlePath + "/history/" + JSON.parse(history.at(-1)!.data).id,
         )
       ).text(),
       /Historical Revision unavailable/,
@@ -693,7 +661,7 @@ test(
     assert.equal(
       (
         await request(
-          articlePath + "/edit?restore=" + JSON.parse(history.at(-1).data).id,
+          articlePath + "/edit?restore=" + JSON.parse(history.at(-1)!.data).id,
         )
       ).status,
       404,
@@ -747,5 +715,11 @@ test(
       limited.every((event) => event.kind === 30818 && event.pubkey === pubkey),
     );
     assert.deepEqual(failures, []);
-  },
-);
+  } finally {
+    try {
+      await Promise.all([readerContext?.close(), server?.close()]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+});
