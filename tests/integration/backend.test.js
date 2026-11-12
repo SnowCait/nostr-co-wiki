@@ -1200,32 +1200,68 @@ test(
           ["日本語記事", "日本語の本文です", "日本語の題名", "日本語の要約"],
           ["literal", 'a quote: "literal" example', "", ""],
         ];
-        // Historical snapshots can predate the title/identifier rule. Seed them
-        // directly to keep testing independent search field weights and ordering.
+        // Pre-rule historical events allow each search field to be tested
+        // independently. Sign each event before storing the complete chain.
         for (const [d, content, title, summary] of fixtures) {
-          const event = revision(d, undefined, content);
-          assert.equal((await publish(client, event))[2], true);
-          const article = await wiki.getArticle(d);
-          article.tags.push(["title", title], ["summary", summary]);
-          const rev = {
-            ...event,
-            tags: [...event.tags, ["title", title], ["summary", summary]],
-          };
+          const rev = revision(d, undefined, content, [
+            ["title", title],
+            ["summary", summary],
+          ]);
+          const created_at = Math.floor(Date.now() / 1000) - 1;
+          const commit = finalizeEvent(
+            {
+              kind: 3818,
+              created_at,
+              content: "",
+              tags: [
+                ["a", `30818:${wikiPubkey}:${d}`],
+                ["e", rev.id],
+                ["seq", "1"],
+              ],
+            },
+            wikiKey,
+          );
+          const article = finalizeEvent(
+            {
+              kind: 30818,
+              created_at,
+              content,
+              tags: [
+                ["d", d],
+                ["title", title],
+                ["summary", summary],
+                ["head", commit.id],
+              ],
+            },
+            wikiKey,
+          );
+          for (const event of [rev, commit, article]) {
+            verify(event);
+            await db.exec(
+              "INSERT INTO events (id, kind, pubkey, created_at, article_d, ref_event_id, seq, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+              Buffer.from(event.id, "hex"),
+              event.kind,
+              Buffer.from(event.pubkey, "hex"),
+              event.created_at,
+              d,
+              event.kind === 3818 ? Buffer.from(rev.id, "hex") : null,
+              event.kind === 3818 ? 1 : null,
+              JSON.stringify(event),
+            );
+          }
           await db.exec(
-            "UPDATE events SET data = ? WHERE id = ?",
-            JSON.stringify(article),
+            "INSERT INTO articles (d, head_commit_id, published_event_id, is_published) VALUES (?, ?, ?, 1)",
+            d,
+            Buffer.from(commit.id, "hex"),
             Buffer.from(article.id, "hex"),
           );
           await db.exec(
-            "UPDATE events SET data = ? WHERE id = ?",
-            JSON.stringify(rev),
-            Buffer.from(event.id, "hex"),
-          );
-          await db.exec(
-            "UPDATE article_fts SET title = ?, summary = ? WHERE d = ?",
+            "INSERT INTO article_fts (rowid, d, title, summary, content) VALUES ((SELECT id FROM articles WHERE d = ?), ?, ?, ?, ?)",
+            d,
+            d,
             title,
             summary,
-            d,
+            content,
           );
         }
         const results = await query(client, {
