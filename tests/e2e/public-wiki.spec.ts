@@ -111,11 +111,18 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
     await expect(page.locator(".empty-state")).toHaveText(
       "No published articles yet. Create the first article",
     );
-    await page.getByLabel("Language", { exact: true }).selectOption("ja");
+    // The initial markup is server-rendered; retry until hydration handles the change.
+    await expect(async () => {
+      await page.locator("#language").selectOption("ja");
+      await expect(page.locator("html")).toHaveAttribute("lang", "ja", {
+        timeout: 500,
+      });
+    }).toPass();
     await expect(page.locator(".empty-state")).toHaveText(
       "公開記事はまだありません。 最初の記事を作成",
     );
     await page.getByLabel("表示言語", { exact: true }).selectOption("en");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await page.keyboard.press("Tab");
     assert.equal(
       await page
@@ -394,8 +401,13 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
     await expect(page.locator("#edit-summary")).toHaveValue(
       `${firstCommit} の本文を復元`,
     );
+    // This button becomes enabled only after the editor has mounted and detected the signer.
+    await expect(
+      page.getByRole("button", { name: "署名して Revision を投稿" }),
+    ).toBeEnabled();
     await page.locator("#edit-summary").fill("My restoration note");
     await page.getByLabel("表示言語", { exact: true }).selectOption("en");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(page.locator("#edit-summary")).toHaveValue(
       "My restoration note",
     );
