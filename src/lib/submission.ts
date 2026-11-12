@@ -1,3 +1,4 @@
+import { m } from "#lib/paraglide/messages.js";
 import type { Event, EventTemplate } from "nostr-tools/pure";
 import { validateEvent, verifyEvent } from "nostr-tools/pure";
 import type { WindowNostr } from "nostr-tools/nip07";
@@ -40,7 +41,7 @@ export async function submitRevision(
     return {
       type: "signing",
       message:
-        "A NIP-07 compatible signing extension is required to create or edit articles.",
+        m.a_nip_07_compatible_signing_extension_is_required_to_create_or_edit_articles(),
     };
   }
   let event: Event;
@@ -76,7 +77,7 @@ export async function submitRevision(
     return {
       type: "signing",
       message:
-        "Signing was declined or the signer returned an invalid Revision. Your draft is preserved.",
+        m.signing_was_declined_or_the_signer_returned_an_invalid_revision_your_draft_is_preserved(),
     };
   }
   return new Promise((resolve) => {
@@ -100,7 +101,7 @@ export async function submitRevision(
     const failed: SubmissionResult = {
       type: "connection",
       message:
-        "No acceptance confirmation was received. Your draft is preserved; check the article before resubmitting.",
+        m.no_acceptance_confirmation_was_received_your_draft_is_preserved_check_the_article_before_resubmitting(),
     };
     const timeout = setTimeout(() => finish(failed), 15000);
     try {
@@ -130,17 +131,17 @@ export async function submitRevision(
         return;
       }
       const reason =
-        typeof message[3] === "string" ? message[3] : "Revision rejected.";
+        typeof message[3] === "string" ? message[3] : m.revision_rejected();
       finish(
         message[2]
           ? {
               type: "accepted",
-              message: "Revision accepted. Checking publication…",
+              message: m.revision_accepted_checking_publication(),
               id: event.id,
             }
           : {
               type: /conflict/i.test(reason) ? "conflict" : "rejected",
-              message: reason,
+              message: m.relay_rejection({ reason }),
             },
       );
     });

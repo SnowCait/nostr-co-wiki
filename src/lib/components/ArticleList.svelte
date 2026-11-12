@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "#lib/paraglide/messages.js";
   import { resolve } from "$app/paths";
   import type { Event } from "nostr-tools/pure";
   import { tag, title, date } from "../article";
@@ -17,7 +18,8 @@
         >{title(article)}</a
       >
       {#if tag(article, "summary")}<p>{tag(article, "summary")}</p>{/if}
-      {#if showDate}<small>Last updated {date(article.created_at)}</small>{/if}
+      {#if showDate}<small>{m.last_updated()} {date(article.created_at)}</small
+        >{/if}
     </li>
   {/each}
 </ul>

@@ -218,6 +218,9 @@ output {
   display: flex;
   gap: 0.5rem;
 }
+.public-wiki .header-search button {
+  white-space: nowrap;
+}
 .public-wiki .header-search input {
   padding: 0.65rem 0.85rem;
   line-height: 1.4;
@@ -746,4 +749,17 @@ output {
     margin-block: 1rem;
     padding: 0.75rem;
   }
+}
+
+.language-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 14px;
+  font-weight: 400;
+}
+.language-switcher select {
+  font: inherit;
+  padding: 0.4rem;
 }

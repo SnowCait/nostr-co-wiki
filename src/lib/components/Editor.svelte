@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "#lib/paraglide/messages.js";
   import { subscribeArticle } from "#lib/article-updates.ts";
   import RenderedArticle from "#lib/components/RenderedArticle.svelte";
   import { resolve } from "$app/paths";
@@ -116,7 +117,7 @@
         }
       } catch {
         if (!controller.signal.aborted) {
-          previewError = "Preview is unavailable. Your source is preserved.";
+          previewError = m.preview_is_unavailable_your_source_is_preserved();
         }
       }
     }, 250);
@@ -160,10 +161,10 @@
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
       notice =
-        "Your Revision was accepted, but publication is not yet confirmed. You can check again.";
+        m.your_revision_was_accepted_but_publication_is_not_yet_confirmed_you_can_check_again();
     } catch {
       notice =
-        "Your Revision was accepted. Unable to check publication right now; check again before resubmitting.";
+        m.your_revision_was_accepted_unable_to_check_publication_right_now_check_again_before_resubmitting();
     } finally {
       busy = false;
     }
@@ -177,15 +178,15 @@
       latest = ((await response.json()) as { article: Event | null }).article;
       if (!latest) {
         notice =
-          "This article is no longer publicly available. Your draft is preserved.";
+          m.this_article_is_no_longer_publicly_available_your_draft_is_preserved();
       }
     } catch {
-      notice = "Unable to load the latest article. Your draft is preserved.";
+      notice = m.unable_to_load_the_latest_article_your_draft_is_preserved();
     }
   }
   async function submit(event: SubmitEvent) {
     event.preventDefault();
-    notice = "Waiting for your signing extension and Relay response…";
+    notice = m.waiting_for_your_signing_extension_and_relay_response();
     outcome = "";
     busy = true;
     latest = null;
@@ -215,58 +216,55 @@
 </script>
 
 {#if data.restored}<p class="notice">
-    Restoring historical content from {data.restored}. Review your draft before
-    signing.
+    {m.restoration_notice({ revision: data.restored })}
   </p>{/if}
 {#if !signingAvailable}<p class="notice" role="status">
-    Waiting for a NIP-07 compatible signing extension. One is required to create
-    or edit articles. Reading remains available.
+    {m.waiting_for_a_nip_07_compatible_signing_extension_one_is_required_to_create_or_edit_articles_reading_remains_available()}
   </p>{/if}
 {#if updated}<p class="notice" role="status">
-    This article has been updated. Your draft and base Commit are unchanged.
+    {m.this_article_has_been_updated_your_draft_and_base_commit_are_unchanged()}
     <a href={resolve("/wiki/[d]", { d })} target="_blank" rel="noopener"
-      >View latest article in a new tab</a
+      >{m.view_latest_article_in_a_new_tab()}</a
     >
   </p>{/if}
 <form class="editor-form" onsubmit={submit} aria-busy={busy}>
   <fieldset disabled={busy || !!acceptedId}>
-    <label for="title">Title (required)</label><input
+    <label for="title">{m.title_required()}</label><input
       id="title"
       bind:value={articleTitle}
       required
     />
     <div class="article-address">
       <p class="metadata">
-        Article identifier: <code>{d || "Enter a title"}</code>
+        {m.article_identifier()} <code>{d || m.enter_a_title()}</code>
       </p>
       <p class="metadata">
-        Article URL: <output>{origin}{articlePath(d)}</output>
+        {m.article_url()} <output>{origin}{articlePath(d)}</output>
       </p>
       {#if !data.base}<p class="availability" aria-live="polite">
-          {#if availability === "published"}This article already exists. <a
-              href={resolve("/wiki/[d]", { d })}>Read the existing article</a
-            >. Submission is unavailable.
-          {:else if availability === "unpublished"}This URL is unavailable.
-          {:else if availability === "available"}This identifier is available.
-            It is not reserved.
-          {:else if availability === "checking"}Checking the identifier…
-          {:else if availability === "error"}Unable to check this identifier.
-            Please try changing the title again.
-          {:else}Enter a title that produces a valid identifier.{/if}
+          {#if availability === "published"}{m.this_article_already_exists()}
+            <a href={resolve("/wiki/[d]", { d })}
+              >{m.read_the_existing_article()}</a
+            >{m.submission_is_unavailable()}
+          {:else if availability === "unpublished"}{m.this_url_is_unavailable()}
+          {:else if availability === "available"}{m.this_identifier_is_available_it_is_not_reserved()}
+          {:else if availability === "checking"}{m.checking_the_identifier()}
+          {:else if availability === "error"}{m.unable_to_check_this_identifier_please_try_changing_the_title_again()}
+          {:else}{m.enter_a_title_that_produces_a_valid_identifier()}{/if}
         </p>{/if}
     </div>
-    <div class="editor-switch" role="group" aria-label="Editor view">
+    <div class="editor-switch" role="group" aria-label={m.editor_view()}>
       <button
         type="button"
         aria-controls="editor-source"
         aria-pressed={editorView === "edit"}
-        onclick={() => (editorView = "edit")}>Edit</button
+        onclick={() => (editorView = "edit")}>{m.edit()}</button
       >
       <button
         type="button"
         aria-controls="editor-preview"
         aria-pressed={editorView === "preview"}
-        onclick={() => (editorView = "preview")}>Preview</button
+        onclick={() => (editorView = "preview")}>{m.preview()}</button
       >
     </div>
     <div class="editor-grid">
@@ -275,26 +273,26 @@
         class="source-pane"
         class:mobile-hidden={editorView !== "edit"}
       >
-        <h2><label for="content">Djot source</label></h2>
+        <h2><label for="content">{m.djot_source()}</label></h2>
         <textarea id="content" bind:value={content} rows="18"></textarea>
       </section>
       <section
         id="editor-preview"
         class="preview-pane"
         class:mobile-hidden={editorView !== "preview"}
-        aria-label="Article preview"
+        aria-label={m.article_preview()}
       >
-        <h2>HTML preview</h2>
+        <h2>{m.html_preview()}</h2>
         {#if previewError}<p role="alert">{previewError}</p>{/if}
         <div class="prose"><RenderedArticle html={preview} /></div>
       </section>
     </div>
     <div class="editor-details">
-      <label for="summary">Summary (optional)</label><textarea
+      <label for="summary">{m.summary_optional()}</label><textarea
         id="summary"
         bind:value={summary}
         rows="2"></textarea>
-      <label for="edit-summary">Edit summary (optional)</label><input
+      <label for="edit-summary">{m.edit_summary_optional()}</label><input
         id="edit-summary"
         bind:value={editSummary}
       />
@@ -305,7 +303,7 @@
           !articleTitle.trim() ||
           !d ||
           (!data.base && availability !== "available")}
-        >Sign and submit Revision</button
+        >{m.sign_and_submit_revision()}</button
       >
     </div>
   </fieldset>
@@ -321,24 +319,23 @@
     {notice}
   </p>{/if}
 {#if acceptedId}<button onclick={checkPublication} disabled={busy}
-    >Check publication</button
+    >{m.check_publication()}</button
   >{/if}
 {#if outcome === "conflict"}<section class="conflict-section">
-    <h2>Resolve the edit conflict</h2>
+    <h2>{m.resolve_the_edit_conflict()}</h2>
     <p>
-      Your draft has been preserved. Review the latest article, manually adjust
-      your changes, then choose its Commit as your new base.
+      {m.your_draft_has_been_preserved_review_the_latest_article_manually_adjust_your_changes_then_choose_its_commit_as_your_new_base()}
     </p>
     <a href={resolve("/wiki/[d]", { d })} target="_blank" rel="noopener"
-      >Open latest article</a
-    > <button onclick={loadLatest}>Refresh latest article</button>
+      >{m.open_latest_article()}</a
+    > <button onclick={loadLatest}>{m.refresh_latest_article()}</button>
     {#if latest}<h3>{tag(latest, "title") ?? d}</h3>
       <pre>{latest.content}</pre>
       <button
         onclick={() => {
           base = tag(latest!, "head");
           notice =
-            "Using the displayed Commit as base. Your draft is unchanged; review it before resubmitting.";
-        }}>Use this Commit as base</button
+            m.using_the_displayed_commit_as_base_your_draft_is_unchanged_review_it_before_resubmitting();
+        }}>{m.use_this_commit_as_base()}</button
       >{/if}
   </section>{/if}

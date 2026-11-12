@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "#lib/paraglide/messages.js";
   import ArticleNav from "#lib/components/ArticleNav.svelte";
   import RenderedArticle from "#lib/components/RenderedArticle.svelte";
   import { tag, title, date } from "#lib/article.ts";
@@ -34,10 +35,10 @@
     {tag(data.article, "summary")}
   </p>{/if}
 <p class="metadata">
-  <small>Last updated {date(data.article.created_at)}</small>
+  <small>{m.last_updated()} {date(data.article.created_at)}</small>
 </p>
 {#if updated}<p class="notice" role="status">
-    This article has been updated.
-    <button onclick={() => refreshAll()}>Show latest article</button>
+    {m.this_article_has_been_updated()}
+    <button onclick={() => refreshAll()}>{m.show_latest_article()}</button>
   </p>{/if}
 <article class="prose"><RenderedArticle html={data.html} /></article>

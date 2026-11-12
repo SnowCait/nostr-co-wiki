@@ -70,6 +70,21 @@ Browser Relay connections use the site's origin and `/relay`: HTTPS produces
 URL environment variable is needed. Internal reads and search use the Wiki
 Durable Object binding; the public `/relay` endpoint retains NIP-01/NIP-50.
 
+## UI languages
+
+English is the default; Japanese is also available. The footer language selector
+saves an explicit choice in a Cookie, ahead of browser language preferences.
+URLs and user-written article content stay unchanged. Switching languages reloads
+the current page; the editor asks for confirmation before discarding unsaved
+input. Dates use the selected language's format and remain in UTC.
+
+Edit UI translations in `messages/en.json` and `messages/ja.json`. Paraglide
+compiles typed message functions during `npm run check` and `npm run build`;
+generated files are not committed. Unit tests check matching keys and interpolation
+parameters. To add a language, extend `project.inlang/settings.json` add its
+message catalog, and include it in the footer selector. Missing translations
+fall back to English.
+
 ## Administration and deployment settings
 
 Open `/admin` and `/admin/articles` on the site's host. Set `ADMIN_PUBLIC_KEY`

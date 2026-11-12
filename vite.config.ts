@@ -1,3 +1,4 @@
+import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import adapter from "@sveltejs/adapter-cloudflare";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
@@ -17,5 +18,15 @@ writeFileSync(
   }),
 );
 export default defineConfig({
-  plugins: [sveltekit({ adapter: adapter({ config: adapterConfig }) })],
+  plugins: [
+    sveltekit({ adapter: adapter({ config: adapterConfig }) }),
+    paraglideVitePlugin({
+      project: "./project.inlang",
+      outdir: "./src/lib/paraglide",
+      emitTsDeclarations: true,
+      // Node.js tests also import UI helpers directly, without Vite.
+      outputStructure: "message-modules",
+      strategy: ["cookie", "preferredLanguage", "baseLocale"],
+    }),
+  ],
 });

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "#lib/paraglide/messages.js";
   import { resolve } from "$app/paths";
   import { onMount } from "svelte";
   import { waitNostr } from "nip07-awaiter";
@@ -16,9 +17,10 @@
   });
 </script>
 
-<h1>Wiki administration</h1>
+<svelte:head><title>{m.wiki_administration()} — NostrCoWiki</title></svelte:head
+>
+<h1>{m.wiki_administration()}</h1>
 {#if !signingAvailable}<p role="status">
-    Waiting for a NIP-07 signing extension. Administrator requests require a
-    signature.
+    {m.waiting_for_a_nip_07_signing_extension_administrator_requests_require_a_signature()}
   </p>{/if}
-<a href={resolve("/admin/articles")}>Manage articles</a>
+<a href={resolve("/admin/articles")}>{m.manage_articles()}</a>

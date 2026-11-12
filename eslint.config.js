@@ -8,6 +8,7 @@ import ts from "typescript-eslint";
 export default defineConfig(
   globalIgnores([
     "**/node_modules/**",
+    "src/lib/paraglide/**",
     "**/.svelte-kit/**",
     "**/.wrangler/**",
     "**/worker-configuration.d.ts",

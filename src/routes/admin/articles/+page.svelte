@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "#lib/paraglide/messages.js";
   import { resolve } from "$app/paths";
   import { onMount } from "svelte";
   import { waitNostr } from "nip07-awaiter";
@@ -26,7 +27,7 @@
   async function request<T>(d?: string, published?: boolean) {
     const signer = window.nostr;
     if (!signer) {
-      throw new Error("A NIP-07 signing extension is required.");
+      throw new Error(m.a_nip_07_signing_extension_is_required());
     }
     const url = new URL("/api/admin/articles", window.location.origin);
     if (d !== undefined) {
@@ -40,7 +41,9 @@
       (event) => signer.signEvent(event),
       true,
       payload,
-    );
+    ).catch(() => {
+      throw new Error(m.administrator_signing_failed());
+    });
     const response = await fetch(url, {
       method,
       headers: {
@@ -48,12 +51,14 @@
         ...(payload ? { "Content-Type": "application/json" } : {}),
       },
       body: payload ? JSON.stringify(payload) : undefined,
+    }).catch(() => {
+      throw new Error(m.the_administration_request_failed());
     });
     if (!response.ok) {
       throw new Error(
         response.status === 401
-          ? "Administrator authentication failed or access was denied."
-          : "The administration request failed.",
+          ? m.administrator_authentication_failed_or_access_was_denied()
+          : m.the_administration_request_failed(),
       );
     }
     return response.json() as Promise<T>;
@@ -67,7 +72,7 @@
     } catch (error) {
       articles = [];
       notice =
-        error instanceof Error ? error.message : "Unable to load articles.";
+        error instanceof Error ? error.message : m.unable_to_load_articles();
     } finally {
       busy = false;
     }
@@ -79,39 +84,39 @@
       await request(d, published);
       articles = await request<typeof articles>();
       selected = null;
-      notice = published ? "Article republished." : "Article unpublished.";
+      notice = published ? m.article_republished() : m.article_unpublished();
     } catch (error) {
       notice =
         error instanceof Error
           ? error.message
-          : "Unable to change publication state.";
+          : m.unable_to_change_publication_state();
     } finally {
       busy = false;
     }
   }
 </script>
 
-<h1>Manage articles</h1>
-<a href={resolve("/admin")}>Administration dashboard</a>
+<svelte:head><title>{m.manage_articles()} — NostrCoWiki</title></svelte:head>
+<h1>{m.manage_articles()}</h1>
+<a href={resolve("/admin")}>{m.administration_dashboard()}</a>
 {#if !signingAvailable}<p role="status">
-    Waiting for a NIP-07 signing extension. Administrator requests require a
-    signature.
+    {m.waiting_for_a_nip_07_signing_extension_administrator_requests_require_a_signature()}
   </p>{/if}
 <button disabled={!signingAvailable || busy} onclick={load}
-  >Load articles</button
+  >{m.load_articles()}</button
 >
 <p role="status">{notice}</p>
 {#if articles.length}<ul>
     {#each articles as item (item.d)}<li>
         <h2>{title(item.article)}</h2>
-        <p>{item.published ? "Published" : "Unpublished"}</p>
+        <p>{item.published ? m.published() : m.unpublished()}</p>
         <button disabled={busy} onclick={() => change(item.d, !item.published)}
-          >{item.published ? "Unpublish" : "Republish"}</button
+          >{item.published ? m.unpublish() : m.republish()}</button
         ><button disabled={busy} onclick={() => (selected = item.article)}
-          >View content</button
+          >{m.view_content()}</button
         >
       </li>{/each}
-  </ul>{:else}<p>No articles loaded.</p>{/if}
+  </ul>{:else}<p>{m.no_articles_loaded()}</p>{/if}
 {#if selected}<section>
     <h2>{title(selected)}</h2>
     <pre>{selected.content}</pre>

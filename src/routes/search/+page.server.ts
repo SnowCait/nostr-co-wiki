@@ -1,3 +1,4 @@
+import { m } from "#lib/paraglide/messages.js";
 import { wiki } from "#lib/server/wiki.ts";
 export async function load({ url }: import("./$types").PageServerLoadEvent) {
   const q = url.searchParams.get("q")?.trim() ?? "";
@@ -11,7 +12,7 @@ export async function load({ url }: import("./$types").PageServerLoadEvent) {
     return {
       q,
       articles: [],
-      failure: "Search is unavailable. Please try again.",
+      failure: m.search_is_unavailable_please_try_again(),
     };
   }
 }

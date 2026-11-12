@@ -1,3 +1,4 @@
+import { m } from "#lib/paraglide/messages.js";
 import { error } from "@sveltejs/kit";
 import { wiki, relayUrl, publicArticle } from "#lib/server/wiki.ts";
 import { tag, title } from "#lib/article.ts";
@@ -13,7 +14,7 @@ export async function load({
       (entry) => entry.commit.id === restored,
     );
     if (!entry?.revision) {
-      error(404, "Historical content is unavailable");
+      error(404, m.historical_content_is_unavailable());
     }
     content = entry.revision.content;
   }

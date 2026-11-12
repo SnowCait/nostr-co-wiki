@@ -1,3 +1,4 @@
+import { m } from "#lib/paraglide/messages.js";
 import { error } from "@sveltejs/kit";
 import { diffLines } from "diff";
 import { publicArticle, wiki } from "#lib/server/wiki.ts";
@@ -7,7 +8,7 @@ export async function load({ params }: import("./$types").PageServerLoadEvent) {
   const history = await wiki().getHistory(params.d);
   const index = history.findIndex((entry) => entry.commit.id === params.commit);
   if (index < 0) {
-    error(404, "Revision not found");
+    error(404, m.revision_not_found());
   }
   const entry = history[index];
   const previous = index === 0 ? "" : history[index - 1].revision?.content;

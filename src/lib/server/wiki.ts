@@ -1,3 +1,4 @@
+import { m } from "#lib/paraglide/messages.js";
 import { env } from "cloudflare:workers";
 import { error } from "@sveltejs/kit";
 
@@ -7,7 +8,7 @@ export function wiki() {
 export async function publicArticle(d: string) {
   const article = await wiki().getArticle(d);
   if (!article) {
-    error(404, "Article not found");
+    error(404, m.article_not_found());
   }
   return article;
 }
