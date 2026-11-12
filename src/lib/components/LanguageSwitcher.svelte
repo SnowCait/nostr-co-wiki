@@ -1,9 +1,10 @@
 <script lang="ts">
   import { get } from "#lib/i18n.ts";
+  import { saveLanguageCookie } from "#lib/language-cookie.ts";
   const i18n = get();
   async function change(event: Event) {
     const locale = (event.currentTarget as HTMLSelectElement).value;
-    document.cookie = `lang=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    saveLanguageCookie(locale);
     await i18n.setLocale(locale);
   }
 </script>

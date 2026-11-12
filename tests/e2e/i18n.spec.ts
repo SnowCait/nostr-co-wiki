@@ -52,6 +52,58 @@ test("localizes SSR, navigation and persistent language selection without changi
         );
       }),
     );
+    for (const locale of ["en", "ja", "invalid"]) {
+      const context = await browser.newContext({ locale: "ja-JP" });
+      try {
+        const expires = Math.floor(Date.now() / 1000) + 600;
+        await context.addCookies([
+          { name: "lang", value: locale, url: url.origin, expires },
+        ]);
+        const page = await context.newPage();
+        await page.goto(url.origin);
+        await expect(page.locator("html")).toHaveAttribute(
+          "lang",
+          locale === "invalid" ? "ja" : locale,
+        );
+        if (locale === "invalid") {
+          await page.locator(".create-link").click();
+          await expect(page).toHaveURL(url.origin + "/new");
+          const cookie = (await context.cookies(url.origin))[0];
+          expect(cookie.value).toBe(locale);
+          expect(cookie.expires).toBe(expires);
+          continue;
+        }
+        await expect
+          .poll(async () => (await context.cookies(url.origin))[0].expires)
+          .toBeGreaterThan(Date.now() / 1000 + 364 * 86400);
+        const refreshed = (await context.cookies(url.origin))[0];
+        expect(refreshed.value).toBe(locale);
+        expect(refreshed.expires).toBeLessThanOrEqual(
+          Date.now() / 1000 + 365 * 86400 + 5,
+        );
+        expect(refreshed.path).toBe("/");
+        expect(refreshed.sameSite).toBe("Lax");
+        // A client-side navigation must not refresh the cookie again.
+        await context.addCookies([
+          { name: "lang", value: locale, url: url.origin, expires },
+        ]);
+        await page.evaluate(() => {
+          (window as unknown as { marker: number }).marker = 42;
+        });
+        await page.locator(".create-link").click();
+        await expect(page).toHaveURL(url.origin + "/new");
+        expect(
+          await page.evaluate(
+            () => (window as unknown as { marker: number }).marker,
+          ),
+        ).toBe(42);
+        const cookie = (await context.cookies(url.origin))[0];
+        expect(cookie.value).toBe(locale);
+        expect(cookie.expires).toBe(expires);
+      } finally {
+        await context.close();
+      }
+    }
     const context = await browser.newContext({
       locale: "ja-JP",
       viewport: { width: 1440, height: 900 },
@@ -65,7 +117,9 @@ test("localizes SSR, navigation and persistent language selection without changi
         page.getByRole("heading", { name: "Wiki を探索" }),
       ).toBeVisible();
       await expect(page.locator("html")).toHaveAttribute("lang", "ja");
+      expect(await context.cookies(url.origin)).toEqual([]);
       await page.goto(url.origin + "/new?draft=1#editor");
+      expect(await context.cookies(url.origin)).toEqual([]);
       await page.getByLabel("タイトル（必須）").fill("Draft title");
       await page.locator("#content").fill("Draft body");
       await page.locator("#summary").fill("Draft summary");
