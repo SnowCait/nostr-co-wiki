@@ -24,6 +24,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@inlang/paraglide-js": "^3.2.2",
+    "@inlang/plugin-message-format": "4.6.0",
     "@playwright/test": "^1.65.0",
     "@sveltejs/adapter-cloudflare": "^8.0.2",
     "@sveltejs/kit": "^3.1.1",
