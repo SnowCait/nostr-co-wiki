@@ -429,9 +429,6 @@ output {
 .public-wiki .notice.error {
   border-left-color: #b91c1c;
 }
-.public-wiki .notice.success {
-  border-left-color: #166534;
-}
 .public-wiki .editor-switch {
   display: none;
 }
@@ -512,6 +509,9 @@ output {
 }
 .public-wiki .revision-actions a {
   padding: 0.5rem 0;
+}
+.public-wiki .historical-content {
+  max-width: 44rem;
 }
 .public-wiki .diff {
   border: 1px solid #cbd5e1;

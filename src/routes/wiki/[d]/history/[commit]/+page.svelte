@@ -48,7 +48,7 @@
       The preceding Revision is unavailable, so differences cannot be computed.
     </p>{/if}
   <h2>Article at this Revision</h2>
-  <article class="prose">
+  <article class="prose historical-content">
     <RenderedArticle html={data.html ?? ""} />
   </article>{:else}<p>
     Historical Revision unavailable. Its content and editor signature cannot be

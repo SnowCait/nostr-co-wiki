@@ -213,6 +213,11 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
         const response = await route.fetch();
         const state = await response.json();
         await route.fulfill({ json: { ...state, reflectsRevision: false } });
+      } else if (
+        new URL(route.request().url()).searchParams.has("revision") &&
+        publicationChecks === 3
+      ) {
+        await route.fulfill({ status: 503 });
       } else {
         await route.continue();
       }
@@ -220,9 +225,16 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
     await page
       .getByRole("button", { name: "Sign and submit Revision" })
       .click();
+    const unconfirmed = page.getByText(
+      "Unable to check publication right now",
+      { exact: false },
+    );
+    await expect(unconfirmed).toBeVisible();
+    await expect(unconfirmed).not.toHaveClass(/success/);
+    await page.getByRole("button", { name: "Check publication" }).click();
     await page.waitForURL(/\/wiki\//);
     assert.ok(
-      publicationChecks >= 3,
+      publicationChecks >= 4,
       "navigation must wait for confirmed publication",
     );
     const d = "日本語-article";

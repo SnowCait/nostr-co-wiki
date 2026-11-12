@@ -286,6 +286,20 @@ test("capture major Wiki screens at desktop and mobile sizes", async ({
           );
           await page.locator(".diff .added").first().waitFor();
           await page.locator(".diff .removed").first().waitFor();
+          const widths = await page
+            .locator(".historical-content")
+            .evaluate((article) => ({
+              article: article.getBoundingClientRect().width,
+              diff: document.querySelector(".diff")!.getBoundingClientRect()
+                .width,
+              rem: parseFloat(
+                getComputedStyle(document.documentElement).fontSize,
+              ),
+            }));
+          assert.ok(widths.article <= 44 * widths.rem);
+          if (viewport.width === 1440) {
+            assert.ok(widths.diff > widths.article);
+          }
           await screenshot(page, "history-detail-diff", viewport);
 
           await page.goto(base + "/admin");

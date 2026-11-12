@@ -34,9 +34,7 @@
           />
           <button>Search</button>
         </form>
-        <a class="create-link" href={resolve("/new")}
-          >Create article <span aria-hidden="true">↗</span></a
-        >
+        <a class="create-link" href={resolve("/new")}>Create article</a>
       </nav>
     </header>
   {/if}

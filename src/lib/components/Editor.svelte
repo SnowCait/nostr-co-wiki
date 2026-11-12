@@ -313,7 +313,6 @@
     class:error={["conflict", "rejected", "signing", "connection"].includes(
       outcome,
     )}
-    class:success={outcome === "accepted"}
     role="status"
     aria-live="polite"
   >
