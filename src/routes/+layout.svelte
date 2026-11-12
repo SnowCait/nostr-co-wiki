@@ -32,6 +32,7 @@
             />
             <button>Search</button>
           </form>{/if}
+        <a class="mobile-search" href={resolve("/search")}>Search</a>
         <a class="create-link" href={resolve("/new")}>Create article</a>
       </nav>
     </header>

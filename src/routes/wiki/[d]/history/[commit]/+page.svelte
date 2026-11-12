@@ -10,8 +10,9 @@
   ><title>Revision {tag(data.entry.commit, "seq")} — NostrCoWiki</title
   ></svelte:head
 >
-<h1>{title(data.article)} — Revision {tag(data.entry.commit, "seq")}</h1>
+<h1>{title(data.article)}</h1>
 <ArticleNav d={tag(data.article, "d")!} current="history" />
+<h2>Revision {tag(data.entry.commit, "seq")}</h2>
 <p class="metadata">{date(data.entry.commit.created_at)}</p>
 <nav class="revision-actions" aria-label="History">
   <a href={resolve("/wiki/[d]/history", { d: tag(data.article, "d")! })}

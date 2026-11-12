@@ -29,10 +29,10 @@
   /></svelte:head
 >
 <h1>{title(data.article)}</h1>
+<ArticleNav d={tag(data.article, "d")!} current="read" />
 {#if tag(data.article, "summary")}<p class="summary">
     {tag(data.article, "summary")}
   </p>{/if}
-<ArticleNav d={tag(data.article, "d")!} current="read" />
 <p class="metadata">
   <small>Last updated {date(data.article.created_at)}</small>
 </p>

@@ -8,8 +8,9 @@
 <svelte:head
   ><title>History of {title(data.article)} — NostrCoWiki</title></svelte:head
 >
-<h1>History of {title(data.article)}</h1>
+<h1>{title(data.article)}</h1>
 <ArticleNav d={tag(data.article, "d")!} current="history" />
+<h2>Article history</h2>
 <ol class="history">
   {#each data.history.toReversed() as entry (entry.commit.id)}<li>
       <a
