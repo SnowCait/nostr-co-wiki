@@ -1,3 +1,5 @@
+import { seedWiki, samples } from "../../scripts/seed-preview.ts";
+import { normalizeIdentifier } from "../../src/lib/identifier.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
@@ -1476,6 +1478,53 @@ test(
         assert.deepEqual(await wiki.subscriptionState(), []);
         assert.equal((await wiki.alarmState()).scheduled, next.scheduled);
         assert.equal((await wiki.triggerCleanup()).scheduled, null);
+      },
+    );
+    await t.test(
+      "seeds missing samples through the Relay without overwriting existing or hidden articles",
+      async () => {
+        const { url } = await server.listen();
+        await seedWiki(url);
+        const ids = samples.map((sample) => normalizeIdentifier(sample.title));
+        const history = await wiki.getHistory(ids[0]);
+        assert.equal(history.length, 2);
+        assert.equal(tag(history[1].commit, "prev"), history[0].commit.id);
+        assert.equal(tag(history[1].revision, "e"), history[0].commit.id);
+        const current = await wiki.getArticle(ids[0]);
+        assert.equal(
+          (
+            await publish(
+              await connection(relay, t),
+              revision(ids[0], tag(current, "head"), "Manual edit", [
+                ["title", samples[0].title],
+              ]),
+            )
+          )[2],
+          true,
+        );
+        await db.exec(
+          "UPDATE articles SET is_published = 0 WHERE d = ?",
+          ids[1],
+        );
+        await db.exec("DELETE FROM article_fts WHERE d = ?", ids[1]);
+        const snapshot = async () => ({
+          events: await db.exec("SELECT * FROM events"),
+          articles: await db.exec("SELECT * FROM articles"),
+          receipts: await db.exec("SELECT * FROM event_receipts"),
+          fts: await db.exec("SELECT * FROM article_fts"),
+        });
+        const before = await snapshot();
+        await seedWiki(url);
+        assert.deepEqual(await snapshot(), before);
+        assert.equal((await wiki.getArticle(ids[0])).content, "Manual edit");
+        assert.equal(await wiki.getArticle(ids[1]), null);
+        // A partial Preview contains only some of the sample articles.
+        await db.exec("DELETE FROM article_fts WHERE d = ?", ids[2]);
+        await db.exec("DELETE FROM articles WHERE d = ?", ids[2]);
+        await db.exec("DELETE FROM events WHERE article_d = ?", ids[2]);
+        await seedWiki(url);
+        assert.ok(await wiki.getArticle(ids[2]));
+        assert.equal((await wiki.getHistory(ids[0])).length, 3);
       },
     );
   },
