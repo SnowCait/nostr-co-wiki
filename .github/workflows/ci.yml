@@ -16,9 +16,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version-file: '.node-version'
           package-manager-cache: false
       - run: npm ci
+      - name: Check Node.js type definitions
+        run: |
+          node_version=$(node -p 'process.versions.node')
+          types_version=$(node -p "require('@types/node/package.json').version")
+          if [ "${node_version%%.*}" != "${types_version%%.*}" ]; then
+            echo "Node.js version $node_version does not match @types/node version $types_version" >&2
+            exit 1
+          fi
       - run: npm run types:check
       - run: npm run lint
       - run: npm run format:check
