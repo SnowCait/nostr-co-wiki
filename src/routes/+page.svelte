@@ -31,5 +31,5 @@
     showDate
   />{:else}<p class="empty-state">
     {i18n.t("common.no_published_articles_yet")}
-    <a href={resolve("/new")}>{i18n.t("common.create_the_first_article")}</a>.
+    <a href={resolve("/new")}>{i18n.t("common.create_the_first_article")}</a>
   </p>{/if}

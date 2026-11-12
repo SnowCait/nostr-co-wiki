@@ -31,7 +31,13 @@
   let content = $state(initial.content);
   let summary = $state(initial.summary);
   let editSummary = $state(
-    initial.restored ? `Restore content from ${initial.restored}` : "",
+    initial.restored
+      ? untrack(() =>
+          i18n.t("common.restore_edit_summary", {
+            revision: initial.restored!,
+          }),
+        )
+      : "",
   );
   let base = $state(initial.base);
   let baseContent = $state(initial.baseContent ?? initial.content);
@@ -263,7 +269,8 @@
             )}
             <a href={resolve("/wiki/[d]", { d })}
               >{i18n.t("common.read_the_existing_article")}</a
-            >{i18n.t("common.submission_is_unavailable")}
+            >
+            {i18n.t("common.submission_is_unavailable")}
           {:else if availability === "unpublished"}{i18n.t(
               "common.this_url_is_unavailable",
             )}

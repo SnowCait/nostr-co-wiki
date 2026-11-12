@@ -42,7 +42,7 @@
   "preview": "プレビュー",
   "read": "閲覧",
   "read_article": "記事を読む",
-  "read_the_existing_article": "既存の記事を読む",
+  "read_the_existing_article": "既存の記事を読む。",
   "read_write_and_improve_a_shared_wiki": "記事を読み、書き、みんなで Wiki を育てましょう。",
   "recently_updated_articles": "最近更新された記事",
   "refresh_latest_article": "最新の記事を再取得",
@@ -118,5 +118,6 @@
   "relay_rejection": "Relay が Revision を拒否しました：{{reason}}",
   "page_not_found": "ページが見つかりません",
   "revision_differences": "Revision の差分",
-  "administrator_signing_failed": "管理リクエストに署名できませんでした。"
+  "administrator_signing_failed": "管理リクエストに署名できませんでした。",
+  "restore_edit_summary": "{{revision}} の本文を復元"
 }

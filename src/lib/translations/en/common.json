@@ -1,5 +1,5 @@
 {
-  "submission_is_unavailable": ". Submission is unavailable.",
+  "submission_is_unavailable": "Submission is unavailable.",
   "a_collaboratively_edited_wiki_on_nostr": "A collaboratively edited Wiki on Nostr.",
   "administration_dashboard": "Administration dashboard",
   "all_revisions": "All revisions",
@@ -42,7 +42,7 @@
   "preview": "Preview",
   "read": "Read",
   "read_article": "Read article",
-  "read_the_existing_article": "Read the existing article",
+  "read_the_existing_article": "Read the existing article.",
   "read_write_and_improve_a_shared_wiki": "Read, write, and improve a shared Wiki.",
   "recently_updated_articles": "Recently updated articles",
   "refresh_latest_article": "Refresh latest article",
@@ -118,5 +118,6 @@
   "relay_rejection": "Relay rejected the Revision: {{reason}}",
   "page_not_found": "Page not found",
   "revision_differences": "Revision differences",
-  "administrator_signing_failed": "The administrator request could not be signed."
+  "administrator_signing_failed": "The administrator request could not be signed.",
+  "restore_edit_summary": "Restore content from {{revision}}"
 }
