@@ -207,7 +207,8 @@ output {
   font-size: 16px;
   white-space: nowrap;
   text-decoration: none;
-  padding: 0.6rem 1rem;
+  padding: 0.65rem 1rem;
+  line-height: 1.4;
   border: 1px solid #64748b;
   border-radius: 3px;
   background: #f8fafc;
@@ -215,6 +216,13 @@ output {
 .public-wiki .header-search {
   display: flex;
   gap: 0.5rem;
+}
+.public-wiki .header-search input {
+  padding: 0.65rem 0.85rem;
+  line-height: 1.4;
+}
+.public-wiki .mobile-search {
+  display: none;
 }
 .public-wiki input,
 .public-wiki textarea {
@@ -558,20 +566,34 @@ output {
 .public-wiki .skip-link:focus {
   top: 0.5rem;
 }
+.public-wiki .site-header nav:not(:has(.header-search)) {
+  grid-template-columns: 1fr auto;
+}
 @media (max-width: 48rem) {
   .public-wiki main {
     width: calc(100% - 2rem);
     margin: 2rem auto 3rem;
   }
   .public-wiki .site-header nav {
-    grid-template-columns: 1fr auto;
-    gap: 1rem;
+    grid-template-columns: 1fr auto auto;
+    gap: 0.25rem;
     padding: 1rem 0;
     width: calc(100% - 2rem);
   }
   .public-wiki .header-search {
-    grid-row: 2;
-    grid-column: 1 / -1;
+    display: none;
+  }
+  .public-wiki .mobile-search {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 0.5rem;
+  }
+  .public-wiki .site-header nav:not(:has(.header-search)) {
+    grid-template-columns: 1fr auto auto;
+  }
+  .public-wiki .create-link {
+    padding-inline: 0.6rem;
   }
   .public-wiki .wordmark {
     font-size: 20px;
@@ -635,9 +657,6 @@ output {
 }
 .public-wiki .editor-switch button {
   margin: 0;
-}
-.public-wiki .site-header nav:not(:has(.header-search)) {
-  grid-template-columns: 1fr auto;
 }
 .public-wiki .history li > a:hover {
   text-decoration: underline;

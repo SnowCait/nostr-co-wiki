@@ -42,6 +42,7 @@ test("capture major Wiki screens at desktop and mobile sizes", async ({
     const { url } = await server.listen();
     const base = url.origin;
     const relay = base.replace(/^http/, "ws") + "/relay";
+    const measurements = new Map<string, { header: number; nav?: number }[]>();
     const screenshot = async (
       page: Page,
       state: string,
@@ -67,9 +68,44 @@ test("capture major Wiki screens at desktop and mobile sizes", async ({
           state + " aligns header, main and footer",
         );
         const path = new URL(page.url()).pathname;
+        const dimensions = await page.evaluate(() => ({
+          header:
+            document.querySelector(".site-header")!.getBoundingClientRect()
+              .bottom + scrollY,
+          nav: document.querySelector(".article-nav")
+            ? document.querySelector(".article-nav")!.getBoundingClientRect()
+                .top + scrollY
+            : undefined,
+        }));
+        const seen = measurements.get(viewport.name) ?? [];
+        if (seen.length) {
+          assert.ok(
+            Math.abs(seen[0].header - dimensions.header) <= 1,
+            state + " header position",
+          );
+          const previous = seen.find((item) => item.nav !== undefined);
+          if (previous?.nav !== undefined && dimensions.nav !== undefined) {
+            assert.ok(
+              Math.abs(previous.nav - dimensions.nav) <= 1,
+              state + " article navigation position",
+            );
+          }
+        }
+        seen.push(dimensions);
+        measurements.set(viewport.name, seen);
+        console.log(
+          `Layout ${viewport.name} ${state}: header=${dimensions.header}, nav=${dimensions.nav ?? "—"}`,
+        );
+        if (viewport.width === 390) {
+          await expect(
+            page.getByRole("link", { name: "Search", exact: true }),
+          ).toBeVisible();
+        }
         await expect(
           page.getByRole("search", { name: "Site search" }),
-        ).toHaveCount(path === "/" || path === "/search" ? 0 : 1);
+        ).toHaveCount(
+          viewport.width === 390 || path === "/" || path === "/search" ? 0 : 1,
+        );
       }
       return page.screenshot({
         path: testInfo.outputPath(
@@ -165,6 +201,15 @@ test("capture major Wiki screens at desktop and mobile sizes", async ({
       "Unpublished test notes for the administration screenshots.",
       "Test data visible only to the administrator.",
       "Create private notes",
+    );
+    const longTitle =
+      "A substantially longer article title that wraps across multiple lines on mobile";
+    const longArticle = await publish(
+      "long-layout-title",
+      longTitle,
+      "Long title content",
+      "A summary for the long title.",
+      "Create long title",
     );
     const adminUrl = base + "/api/admin/articles?d=private-notes";
     const payload = { published: false };
@@ -323,6 +368,37 @@ test("capture major Wiki screens at desktop and mobile sizes", async ({
             page.getByRole("link", { name: "Revision 3", exact: true }),
           ).toBeVisible();
 
+          const longPositions: number[] = [];
+          for (const suffix of [
+            "",
+            "/edit",
+            "/history",
+            "/history/" + head(longArticle),
+          ]) {
+            await page.goto(base + "/wiki/long-layout-title" + suffix);
+            await expect(
+              page.getByRole("heading", { name: longTitle, level: 1 }),
+            ).toBeVisible();
+            longPositions.push(
+              await page
+                .locator(".article-nav")
+                .evaluate((nav) => nav.getBoundingClientRect().top + scrollY),
+            );
+          }
+          assert.ok(
+            Math.max(...longPositions) - Math.min(...longPositions) <= 1,
+            "wrapped title navigation position",
+          );
+          console.log(
+            `Long title ${viewport.name}: nav=${longPositions.join(", ")}`,
+          );
+          if (viewport.width === 390) {
+            await page
+              .getByRole("link", { name: "Search", exact: true })
+              .click();
+            await expect(page).toHaveURL(base + "/search");
+            await expect(page.getByLabel("Search query")).toBeVisible();
+          }
           await page.goto(base + "/admin");
           await page
             .getByRole("heading", { name: "Wiki administration", exact: true })
