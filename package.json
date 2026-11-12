@@ -19,7 +19,8 @@
     "test:unit": "node --test \"src/**/*.test.js\"",
     "test:integration": "node --test \"tests/integration/**/*.test.js\"",
     "test:e2e": "playwright test",
-    "check:e2e": "tsc --noEmit -p tests/e2e/tsconfig.json"
+    "check:e2e": "tsc --noEmit -p tests/e2e/tsconfig.json",
+    "preview": "wrangler preview && node scripts/preview.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
