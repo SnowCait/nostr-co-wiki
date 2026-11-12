@@ -205,7 +205,7 @@ test("capture major Wiki screens at desktop and mobile sizes", async ({
     const longTitle =
       "A substantially longer article title that wraps across multiple lines on mobile";
     const longArticle = await publish(
-      "long-layout-title",
+      "a-substantially-longer-article-title-that-wraps-across-multiple-lines-on-mobile",
       longTitle,
       "Long title content",
       "A summary for the long title.",
@@ -375,7 +375,11 @@ test("capture major Wiki screens at desktop and mobile sizes", async ({
             "/history",
             "/history/" + head(longArticle),
           ]) {
-            await page.goto(base + "/wiki/long-layout-title" + suffix);
+            await page.goto(
+              base +
+                "/wiki/a-substantially-longer-article-title-that-wraps-across-multiple-lines-on-mobile" +
+                suffix,
+            );
             await expect(
               page.getByRole("heading", { name: longTitle, level: 1 }),
             ).toBeVisible();

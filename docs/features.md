@@ -60,7 +60,7 @@ Article creation uses a single screen containing:
 - An optional edit summary.
 - A submission action.
 
-The generated `d` cannot be edited manually. Changing the title regenerates `d` and checks for duplicates again. Changing the title does not discard entered content, summary, or edit summary.
+The generated `d` cannot be edited manually. Changing the title regenerates `d` and checks for duplicates again. Changing the title does not discard entered content, summary, or edit summary. The Relay accepts a new article only when normalizing its displayed title produces the submitted `d` (an omitted title displays `d`). This is a NostrCoWiki acceptance rule; NIP-54 itself allows `title` to differ from `d`.
 
 If a published article uses the identifier, the screen displays a link to that article and does not allow submission. If an unpublished article uses the identifier, the screen indicates that the URL is unavailable and does not allow submission; it does not show the unpublished article's content or an administrative link. The user may continue editing content while an identifier is duplicated.
 
@@ -85,9 +85,9 @@ Existing articles can be edited using the same Djot source editor and HTML previ
 
 The editor loads the current article content and its base Commit.
 
-Users may update the article title, summary, content, and edit summary.
+Users may update the summary, content, and optional edit summary. The existing title is read-only.
 
-Changing the title does not change the article's `d` identifier or URL.
+NostrCoWiki only accepts edits that change Djot content or Summary. Edit summary alone does not enable submission. Article renaming is not supported.
 
 Revisions are signed through NIP-07 and sent to the Relay.
 
@@ -95,7 +95,8 @@ Revisions are signed through NIP-07 and sent to the Relay.
 
 - Users can modify an existing published article.
 - Accepted edits update the published article.
-- The article URL remains unchanged when its title changes.
+- Existing titles cannot be changed in the editor or through the Relay.
+- Submission is disabled unless content or Summary differs from the base Commit, including after selecting a new base during conflict resolution.
 - A conflicting edit is reported to the user.
 - The user's entered edits are preserved when a conflict occurs.
 - Users can inspect the latest article and manually adjust their changes.
@@ -147,6 +148,8 @@ Restoration creates a new Revision containing the selected historical content an
 The user signs and submits the new Revision using the normal editing process.
 
 If restoration conflicts with a newer Commit, the user is notified, the restoration content is preserved, and the user can inspect the latest article and manually adjust the content before resubmitting. Automatic merging is not performed.
+
+Restored content is compared with the current content, not the historical draft. If neither content nor Summary changes, submission is disabled.
 
 Previous Revisions and Commits are not modified or removed.
 

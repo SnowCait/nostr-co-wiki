@@ -2,6 +2,7 @@ import { decode } from "nostr-tools/nip19";
 import { finalizeEvent, getPublicKey, type Event } from "nostr-tools/pure";
 import { hexToBytes } from "nostr-tools/utils";
 import { revisionTarget } from "./protocol";
+import { normalizeIdentifier } from "#lib/identifier.ts";
 
 type ArticleState = {
   id: number;
@@ -47,6 +48,31 @@ export async function acceptRevision(
       throw new Error(
         "blocked: edit conflict (base Commit does not match current article)",
       );
+    }
+    if (!previous) {
+      const title = revision.tags.find((tag) => tag[0] === "title")?.[1];
+      if (title !== undefined && normalizeIdentifier(title) !== d) {
+        throw new Error("blocked: article title does not match identifier");
+      }
+    }
+    if (previous) {
+      const current = eventById(
+        storage.sql,
+        hexToBytes(previous.tags.find((tag) => tag[0] === "e")![1]),
+      );
+      if (
+        (revision.tags.find((tag) => tag[0] === "title")?.[1] ?? d) !==
+        (current.tags.find((tag) => tag[0] === "title")?.[1] ?? d)
+      ) {
+        throw new Error("blocked: article title cannot be changed");
+      }
+      if (
+        revision.content === current.content &&
+        (revision.tags.find((tag) => tag[0] === "summary")?.[1] ?? "") ===
+          (current.tags.find((tag) => tag[0] === "summary")?.[1] ?? "")
+      ) {
+        throw new Error("blocked: Revision has no content or summary changes");
+      }
     }
     const published = article?.published_event_id
       ? eventById(storage.sql, article.published_event_id)
@@ -131,7 +157,7 @@ export async function acceptRevision(
   }
 }
 
-function eventById(sql: SqlStorage, id: ArrayBuffer): Event {
+function eventById(sql: SqlStorage, id: ArrayBuffer | Uint8Array): Event {
   const row = sql
     .exec<{ data: string }>("SELECT data FROM events WHERE id = ?", id)
     .one();

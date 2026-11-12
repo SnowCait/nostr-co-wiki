@@ -89,7 +89,7 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
       d: string,
       content: string,
       articleBase?: string,
-      title = d,
+      title = d === "日本語-article" ? "日本語 Article" : d,
     ) =>
       submitRevision(
         signer,
@@ -257,12 +257,27 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
       page.getByRole("button", { name: "Sign and submit Revision" }),
     ).toBeDisabled();
     await page.goto(base + articlePath + "/edit");
-    // Signing is enabled after Editor mounts; avoid filling the SSR input during hydration.
     await page
-      .getByRole("button", { name: "Sign and submit Revision" })
-      .and(page.locator(":enabled"))
-      .waitFor();
-    await page.getByLabel("Title (required)").fill("Renamed title");
+      .getByText("Waiting for a NIP-07", { exact: false })
+      .waitFor({ state: "hidden" });
+    await expect(page.getByLabel("Title (required)")).toHaveAttribute(
+      "readonly",
+      "",
+    );
+    const submitButton = page.getByRole("button", {
+      name: "Sign and submit Revision",
+    });
+    await expect(submitButton).toBeDisabled();
+    await page.getByLabel("Edit summary (optional)").fill("Metadata alone");
+    await expect(submitButton).toBeDisabled();
+    await page
+      .getByLabel("Summary (optional)", { exact: true })
+      .fill("Changed summary");
+    await expect(submitButton).toBeEnabled();
+    await page
+      .getByLabel("Summary (optional)", { exact: true })
+      .fill("Japanese summary");
+    await expect(submitButton).toBeDisabled();
     await page.getByLabel("Djot source").fill("My preserved edit\n");
     await page
       .getByLabel("Summary (optional)", { exact: true })
@@ -291,7 +306,7 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
       .getByText("This article has been updated.", { exact: false })
       .waitFor();
     await expect(page.getByLabel("Title (required)")).toHaveValue(
-      "Renamed title",
+      "日本語 Article",
     );
     await expect(page.getByLabel("Djot source")).toHaveValue(
       "My preserved edit\n",
@@ -318,14 +333,23 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
       "My preserved edit\n",
     );
     await page.getByRole("button", { name: "Use this Commit as base" }).click();
+    await page.getByLabel("Djot source").fill("Another editor's update\n");
+    await page.getByLabel("Summary (optional)", { exact: true }).fill("");
+    await expect(submitButton).toBeDisabled();
+    await page.getByLabel("Djot source").fill("My preserved edit\n");
+    await page
+      .getByLabel("Summary (optional)", { exact: true })
+      .fill("Draft summary");
+    await expect(submitButton).toBeEnabled();
+
     await page
       .getByRole("button", { name: "Sign and submit Revision" })
       .click();
     await page.waitForURL(base + articlePath);
     await page
-      .getByRole("heading", { name: "Renamed title", exact: true })
+      .getByRole("heading", { name: "日本語 Article", exact: true })
       .waitFor();
-    assert.match(await page.content(), /Renamed title/);
+    assert.match(await page.content(), /日本語 Article/);
     assert.match(await page.content(), /My preserved edit/);
     await page.getByRole("link", { name: "Editing history" }).click();
     await page.getByRole("link", { name: "Revision 1", exact: true }).click();
@@ -377,6 +401,16 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
       restoredRevision.tags.find((tag) => tag[0] === "e")![1],
       JSON.parse(history.at(-2)!.data).id,
     );
+    await page.goto(
+      base +
+        articlePath +
+        "/edit?restore=" +
+        JSON.parse(history.at(-1)!.data).id,
+    );
+    await expect(page.getByLabel("Djot source")).toHaveValue(first.content);
+    await expect(submitButton).toBeDisabled();
+    await page.getByLabel("Edit summary (optional)").fill("Still unchanged");
+    await expect(submitButton).toBeDisabled();
     // Differencing must show both removals and additions for the second Revision.
     const secondCommit = JSON.parse(history[1].data).id;
     const diffHtml = await (

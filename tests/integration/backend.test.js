@@ -499,7 +499,7 @@ test(
       "accepts a new Revision, signs Wiki events, and records the originating IP",
       async () => {
         first = revision("nostr", undefined, "Nostr is an open protocol.", [
-          ["title", "Nostr"],
+          ["title", "nostr"],
           ["summary", "A protocol overview"],
           ["edit_summary", "Initial article"],
         ]);
@@ -519,7 +519,7 @@ test(
         assert.equal(firstArticle.pubkey, wikiPubkey);
         assert.equal(tag(firstArticle, "head"), commit.id);
         assert.equal(firstArticle.content, first.content);
-        assert.equal(tag(firstArticle, "title"), "Nostr");
+        assert.equal(tag(firstArticle, "title"), "nostr");
         assert.equal(tag(firstArticle, "summary"), "A protocol overview");
         for (const event of [first, commit, firstArticle]) {
           verify(event);
@@ -541,6 +541,45 @@ test(
           ),
           [{ id_len: 32, pubkey_len: 32 }],
         );
+      },
+    );
+
+    await t.test(
+      "validates new article titles before writing state",
+      async () => {
+        for (const [d, title] of [
+          ["title-exact", "title-exact"],
+          ["title-omitted", undefined],
+          ["title-upper", "Title Upper"],
+          ["hello-world", "Hello World"],
+          ["ひらがな-article", "ひらがな Article"],
+        ]) {
+          const event = revision(
+            d,
+            undefined,
+            "content",
+            title === undefined ? [] : [["title", title]],
+          );
+          assert.equal((await publish(client, event))[2], true);
+          assert.equal((await publish(client, event))[2], true);
+        }
+        const snapshot = async () => ({
+          events: await db.exec("SELECT * FROM events"),
+          articles: await db.exec("SELECT * FROM articles"),
+          receipts: await db.exec("SELECT * FROM event_receipts"),
+          fts: await db.exec("SELECT * FROM article_fts"),
+        });
+        const before = await snapshot();
+        for (const title of ["b", ""]) {
+          const result = await publish(
+            client,
+            revision("a", undefined, "content", [["title", title]]),
+          );
+          assert.equal(result[2], false);
+          assert.match(result[3], /title does not match identifier/);
+          assert.deepEqual(await snapshot(), before);
+          assert.deepEqual(await wiki.getHistory("a"), []);
+        }
       },
     );
 
@@ -579,6 +618,81 @@ test(
           db.exec(`INSERT INTO events (id, kind, pubkey, created_at, article_d, ref_event_id, seq, data)
       SELECT randomblob(32), kind, pubkey, created_at, article_d, randomblob(32), seq, data FROM events WHERE kind = 3818`),
         );
+      },
+    );
+
+    await t.test(
+      "enforces display titles and meaningful changes against the confirmed head",
+      async () => {
+        const d = "edit-rules";
+        const first = revision(d, undefined, "original");
+        assert.equal((await publish(client, first))[2], true);
+        const originalArticle = await wiki.getArticle(d);
+        let base = tag(originalArticle, "head");
+        const snapshot = async () => ({
+          events: await db.exec("SELECT * FROM events WHERE article_d = ?", d),
+          articles: await db.exec("SELECT * FROM articles WHERE d = ?", d),
+          fts: await db.exec("SELECT * FROM article_fts WHERE d = ?", d),
+          receipts: await db.exec("SELECT * FROM event_receipts"),
+        });
+        const before = await snapshot();
+        for (const [tags, reason] of [
+          [[], /no content or summary changes/],
+          [
+            [["edit_summary", "Only metadata"]],
+            /no content or summary changes/,
+          ],
+          [[["summary", ""]], /no content or summary changes/],
+          [[["title", "Edit Rules"]], /title cannot be changed/],
+        ]) {
+          const result = await publish(
+            client,
+            revision(d, base, "original", tags),
+          );
+          assert.equal(result[2], false);
+          assert.match(result[3], reason);
+          assert.deepEqual(await snapshot(), before);
+        }
+        // Explicit d and omitted title represent the same display title.
+        for (const [content, tags] of [
+          ["body changed", [["title", d]]],
+          ["body changed", [["summary", "overview"]]],
+          ["both changed", [["summary", "new overview"]]],
+          ["both changed", []],
+        ]) {
+          const event = revision(d, base, content, tags);
+          assert.equal((await publish(client, event))[2], true);
+          base = tag(await wiki.getArticle(d), "head");
+          assert.equal((await publish(client, event))[2], true);
+        }
+        // Simulate a published snapshot lagging behind the confirmed Commit.
+        await db.exec(
+          "UPDATE articles SET published_event_id = ? WHERE d = ?",
+          Buffer.from(originalArticle.id, "hex"),
+          d,
+        );
+        await db.exec(
+          "INSERT INTO events (id, kind, pubkey, created_at, article_d, data) VALUES (?, ?, ?, ?, ?, ?)",
+          Buffer.from(originalArticle.id, "hex"),
+          originalArticle.kind,
+          Buffer.from(originalArticle.pubkey, "hex"),
+          originalArticle.created_at,
+          d,
+          JSON.stringify(originalArticle),
+        );
+        const lagging = await snapshot();
+        const noop = await publish(
+          client,
+          revision(d, base, "both changed", [["summary", ""]]),
+        );
+        assert.equal(noop[2], false);
+        assert.match(noop[3], /no content or summary changes/);
+        assert.deepEqual(await snapshot(), lagging);
+        assert.equal(
+          (await publish(client, revision(d, base, "original")))[2],
+          true,
+        );
+        assert.equal((await wiki.getHistory(d)).length, 6);
       },
     );
 
@@ -1086,18 +1200,68 @@ test(
           ["日本語記事", "日本語の本文です", "日本語の題名", "日本語の要約"],
           ["literal", 'a quote: "literal" example', "", ""],
         ];
+        // Pre-rule historical events allow each search field to be tested
+        // independently. Sign each event before storing the complete chain.
         for (const [d, content, title, summary] of fixtures) {
-          assert.equal(
-            (
-              await publish(
-                client,
-                revision(d, undefined, content, [
-                  ["title", title],
-                  ["summary", summary],
-                ]),
-              )
-            )[2],
-            true,
+          const rev = revision(d, undefined, content, [
+            ["title", title],
+            ["summary", summary],
+          ]);
+          const created_at = Math.floor(Date.now() / 1000) - 1;
+          const commit = finalizeEvent(
+            {
+              kind: 3818,
+              created_at,
+              content: "",
+              tags: [
+                ["a", `30818:${wikiPubkey}:${d}`],
+                ["e", rev.id],
+                ["seq", "1"],
+              ],
+            },
+            wikiKey,
+          );
+          const article = finalizeEvent(
+            {
+              kind: 30818,
+              created_at,
+              content,
+              tags: [
+                ["d", d],
+                ["title", title],
+                ["summary", summary],
+                ["head", commit.id],
+              ],
+            },
+            wikiKey,
+          );
+          for (const event of [rev, commit, article]) {
+            verify(event);
+            await db.exec(
+              "INSERT INTO events (id, kind, pubkey, created_at, article_d, ref_event_id, seq, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+              Buffer.from(event.id, "hex"),
+              event.kind,
+              Buffer.from(event.pubkey, "hex"),
+              event.created_at,
+              d,
+              event.kind === 3818 ? Buffer.from(rev.id, "hex") : null,
+              event.kind === 3818 ? 1 : null,
+              JSON.stringify(event),
+            );
+          }
+          await db.exec(
+            "INSERT INTO articles (d, head_commit_id, published_event_id, is_published) VALUES (?, ?, ?, 1)",
+            d,
+            Buffer.from(commit.id, "hex"),
+            Buffer.from(article.id, "hex"),
+          );
+          await db.exec(
+            "INSERT INTO article_fts (rowid, d, title, summary, content) VALUES ((SELECT id FROM articles WHERE d = ?), ?, ?, ?, ?)",
+            d,
+            d,
+            title,
+            summary,
+            content,
           );
         }
         const results = await query(client, {
@@ -1140,7 +1304,12 @@ test(
           (
             await publish(
               client,
-              revision("rank-content-exact", tag(original, "head"), "new text"),
+              revision(
+                "rank-content-exact",
+                tag(original, "head"),
+                "new text",
+                [["title", ""]],
+              ),
             )
           )[2],
           true,
