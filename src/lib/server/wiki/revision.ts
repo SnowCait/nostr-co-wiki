@@ -2,6 +2,7 @@ import { decode } from "nostr-tools/nip19";
 import { finalizeEvent, getPublicKey, type Event } from "nostr-tools/pure";
 import { hexToBytes } from "nostr-tools/utils";
 import { revisionTarget } from "./protocol";
+import { normalizeIdentifier } from "#lib/identifier.ts";
 
 type ArticleState = {
   id: number;
@@ -47,6 +48,12 @@ export async function acceptRevision(
       throw new Error(
         "blocked: edit conflict (base Commit does not match current article)",
       );
+    }
+    if (!previous) {
+      const title = revision.tags.find((tag) => tag[0] === "title")?.[1];
+      if (title !== undefined && normalizeIdentifier(title) !== d) {
+        throw new Error("blocked: article title does not match identifier");
+      }
     }
     if (previous) {
       const current = eventById(

@@ -545,6 +545,45 @@ test(
     );
 
     await t.test(
+      "validates new article titles before writing state",
+      async () => {
+        for (const [d, title] of [
+          ["title-exact", "title-exact"],
+          ["title-omitted", undefined],
+          ["title-upper", "Title Upper"],
+          ["hello-world", "Hello World"],
+          ["ひらがな-article", "ひらがな Article"],
+        ]) {
+          const event = revision(
+            d,
+            undefined,
+            "content",
+            title === undefined ? [] : [["title", title]],
+          );
+          assert.equal((await publish(client, event))[2], true);
+          assert.equal((await publish(client, event))[2], true);
+        }
+        const snapshot = async () => ({
+          events: await db.exec("SELECT * FROM events"),
+          articles: await db.exec("SELECT * FROM articles"),
+          receipts: await db.exec("SELECT * FROM event_receipts"),
+          fts: await db.exec("SELECT * FROM article_fts"),
+        });
+        const before = await snapshot();
+        for (const title of ["b", ""]) {
+          const result = await publish(
+            client,
+            revision("a", undefined, "content", [["title", title]]),
+          );
+          assert.equal(result[2], false);
+          assert.match(result[3], /title does not match identifier/);
+          assert.deepEqual(await snapshot(), before);
+          assert.deepEqual(await wiki.getHistory("a"), []);
+        }
+      },
+    );
+
+    await t.test(
       "resubmission is idempotent and constraints enforce one Commit per Revision and sequence",
       async () => {
         const before = await db.exec("SELECT * FROM event_receipts");
@@ -1161,18 +1200,32 @@ test(
           ["日本語記事", "日本語の本文です", "日本語の題名", "日本語の要約"],
           ["literal", 'a quote: "literal" example', "", ""],
         ];
+        // Historical snapshots can predate the title/identifier rule. Seed them
+        // directly to keep testing independent search field weights and ordering.
         for (const [d, content, title, summary] of fixtures) {
-          assert.equal(
-            (
-              await publish(
-                client,
-                revision(d, undefined, content, [
-                  ["title", title],
-                  ["summary", summary],
-                ]),
-              )
-            )[2],
-            true,
+          const event = revision(d, undefined, content);
+          assert.equal((await publish(client, event))[2], true);
+          const article = await wiki.getArticle(d);
+          article.tags.push(["title", title], ["summary", summary]);
+          const rev = {
+            ...event,
+            tags: [...event.tags, ["title", title], ["summary", summary]],
+          };
+          await db.exec(
+            "UPDATE events SET data = ? WHERE id = ?",
+            JSON.stringify(article),
+            Buffer.from(article.id, "hex"),
+          );
+          await db.exec(
+            "UPDATE events SET data = ? WHERE id = ?",
+            JSON.stringify(rev),
+            Buffer.from(event.id, "hex"),
+          );
+          await db.exec(
+            "UPDATE article_fts SET title = ?, summary = ? WHERE d = ?",
+            title,
+            summary,
+            d,
           );
         }
         const results = await query(client, {

@@ -121,6 +121,7 @@ Clients submit Revisions using the NIP-01 `EVENT` message. The dedicated relay v
 ### New Articles
 
 - A Revision is accepted as a new article if the target article does not exist and the Revision has no `e` tag.
+- When `title` is present, `normalizeIdentifier(title)` MUST equal `d`. An omitted `title` uses `d` as the display title and is accepted. This is a NostrCoWiki Revision acceptance rule, not a NIP-54 requirement; NIP-54 permits the display title to differ from `d`.
 - The first Commit referencing the accepted Revision is confirmed with `seq=1`.
 
 ### Existing Articles

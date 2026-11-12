@@ -60,7 +60,7 @@ Article creation uses a single screen containing:
 - An optional edit summary.
 - A submission action.
 
-The generated `d` cannot be edited manually. Changing the title regenerates `d` and checks for duplicates again. Changing the title does not discard entered content, summary, or edit summary.
+The generated `d` cannot be edited manually. Changing the title regenerates `d` and checks for duplicates again. Changing the title does not discard entered content, summary, or edit summary. The Relay accepts a new article only when normalizing its displayed title produces the submitted `d` (an omitted title displays `d`). This is a NostrCoWiki acceptance rule; NIP-54 itself allows `title` to differ from `d`.
 
 If a published article uses the identifier, the screen displays a link to that article and does not allow submission. If an unpublished article uses the identifier, the screen indicates that the URL is unavailable and does not allow submission; it does not show the unpublished article's content or an administrative link. The user may continue editing content while an identifier is duplicated.
 
