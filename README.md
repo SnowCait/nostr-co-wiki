@@ -36,15 +36,17 @@ npm run format:check
 npm test
 ```
 
-`npm test` generates Worker types, checks TypeScript, builds SvelteKit, and runs
+`npm test` builds SvelteKit, generates Worker types, checks TypeScript, and runs
 colocated unit tests in `src/`, Workers/SQLite/Relay integration tests in
 `tests/integration/` with Node’s test runner, then browser scenarios in
 `tests/e2e/` with Playwright Test. Run these separately with `npm run test:unit`,
 `npm run test:integration`, and `npm run test:e2e` after building. The E2E runner
-stores results in `test-results/`; the screenshot scenario writes 22 full-page
-PNGs under its `ui-screenshots/` output directory. Download the complete
-`test-results/` directory from the CI run’s `playwright-test-results` Artifact.
-`npm run check` checks application and E2E types without building;
+stores results in `test-results/`; the screenshot scenario captures major screens
+in English and Japanese at desktop and mobile sizes under its `ui-screenshots/`
+output directory. Download `test-results/` from the CI run’s
+`playwright-test-results` Artifact.
+`npm run check` builds SvelteKit to generate translation types, generates Worker
+types, and checks application and E2E types;
 `npm run check:e2e` checks E2E tests and Playwright configuration with `tsc --noEmit`. Use `npm run types` after changing
 Wrangler configuration; do not edit `worker-configuration.d.ts` manually.
 
@@ -86,3 +88,9 @@ Dashboard-managed runtime variables are preserved by `keep_vars`.
 The single root `wrangler.json` declares the `WIKI` binding and its SQLite class
 export. No separate Relay Worker deployment is needed. Existing Durable Object
 data migration is outside the scope of this structure change.
+
+### UI languages
+
+The Web UI supports English and Japanese using sveltekit-i18n v3's SvelteKit integration. Each SSR request gets an independent instance. A manual `lang` cookie takes priority over `Accept-Language`, with English as the fallback. The footer switches language without navigating or remounting the editor. URLs and user content stay intact; dates use the selected locale with UTC.
+
+Edit `src/lib/translations/{en,ja}/common.json`. Curly messages use `{{name}}` for interpolation and `{{number:number}}` for numeric parameters. The official typegen Vite plugin generates the ignored `src/i18n-schema.d.ts`; `npm run check` builds before checking types, and `npm test` reuses that build. No manual generation is needed after `npm ci`. `src/i18n.typecheck.ts` checks invalid keys and payloads, while unit tests compare keys and parser-defined parameters across languages. Plain Node tests import the parser's build-time extractor, without creating a rune-based i18n instance.

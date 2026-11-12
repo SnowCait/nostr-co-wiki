@@ -108,7 +108,21 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
     page.on("websocket", (socket) => assert.equal(socket.url(), relayUrl));
     page.on("pageerror", (error) => failures.push(error.message));
     await page.goto(base);
-    assert.match(await page.content(), /No published articles yet/);
+    await expect(page.locator(".empty-state")).toHaveText(
+      "No published articles yet. Create the first article",
+    );
+    // The initial markup is server-rendered; retry until hydration handles the change.
+    await expect(async () => {
+      await page.locator("#language").selectOption("ja");
+      await expect(page.locator("html")).toHaveAttribute("lang", "ja", {
+        timeout: 500,
+      });
+    }).toPass();
+    await expect(page.locator(".empty-state")).toHaveText(
+      "公開記事はまだありません。 最初の記事を作成",
+    );
+    await page.getByLabel("表示言語", { exact: true }).selectOption("en");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await page.keyboard.press("Tab");
     assert.equal(
       await page
@@ -253,9 +267,18 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
     await page
       .getByText("This article already exists.", { exact: false })
       .waitFor();
-    await expect(
-      page.getByRole("button", { name: "Sign and submit Revision" }),
-    ).toBeDisabled();
+    await expect(page.locator(".availability")).toHaveText(
+      "This article already exists. Read the existing article. Submission is unavailable.",
+    );
+    await expect(page.locator(".availability a")).toHaveAttribute(
+      "href",
+      "/wiki/" + d,
+    );
+    await page.getByLabel("Language", { exact: true }).selectOption("ja");
+    await expect(page.locator(".availability")).toHaveText(
+      "この記事は既に存在します。 既存の記事を読む。 投稿できません。",
+    );
+    await page.getByLabel("表示言語", { exact: true }).selectOption("en");
     await page.goto(base + articlePath + "/edit");
     await page
       .getByText("Waiting for a NIP-07", { exact: false })
@@ -283,6 +306,16 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
       .getByLabel("Summary (optional)", { exact: true })
       .fill("Draft summary");
     await page.getByLabel("Edit summary (optional)").fill("Draft edit summary");
+    await page.getByLabel("Language", { exact: true }).selectOption("ja");
+    await expect(page.locator("html")).toHaveAttribute("lang", "ja");
+    await expect(page.locator("#content")).toHaveValue("My preserved edit\n");
+    await expect(page.locator("#summary")).toHaveValue("Draft summary");
+    await expect(page.locator("#edit-summary")).toHaveValue(
+      "Draft edit summary",
+    );
+    await page.getByLabel("表示言語", { exact: true }).selectOption("en");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+
     await page.evaluate(() => {
       globalThis.nostr.signEvent = async () => {
         throw new Error("Declined");
@@ -357,6 +390,28 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
     await page.locator(".diff .added").first().waitFor();
     await page.getByRole("link", { name: "Prepare restoration" }).click();
     await expect(page.getByLabel("Djot source")).toHaveValue(first.content);
+    await expect(page.locator("#edit-summary")).toHaveValue(
+      `Restore content from ${firstCommit}`,
+    );
+    await page.getByLabel("Language", { exact: true }).selectOption("ja");
+    await expect(page.locator("#edit-summary")).toHaveValue(
+      `Restore content from ${firstCommit}`,
+    );
+    await page.reload();
+    await expect(page.locator("#edit-summary")).toHaveValue(
+      `${firstCommit} の本文を復元`,
+    );
+    // This button becomes enabled only after the editor has mounted and detected the signer.
+    await expect(
+      page.getByRole("button", { name: "署名して Revision を投稿" }),
+    ).toBeEnabled();
+    await page.locator("#edit-summary").fill("My restoration note");
+    await page.getByLabel("表示言語", { exact: true }).selectOption("en");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.locator("#edit-summary")).toHaveValue(
+      "My restoration note",
+    );
+    await expect(page.locator("#content")).toHaveValue(first.content);
     const restoreBase = (await info(d)).article!.tags.find(
       (tag) => tag[0] === "head",
     )![1];

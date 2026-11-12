@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { get } from "#lib/i18n.ts";
+  const i18n = get();
   import ArticleNav from "#lib/components/ArticleNav.svelte";
   import RenderedArticle from "#lib/components/RenderedArticle.svelte";
   import { tag, title, date } from "#lib/article.ts";
@@ -34,10 +36,15 @@
     {tag(data.article, "summary")}
   </p>{/if}
 <p class="metadata">
-  <small>Last updated {date(data.article.created_at)}</small>
+  <small
+    >{i18n.t("common.last_updated")}
+    {date(data.article.created_at, i18n.locale)}</small
+  >
 </p>
 {#if updated}<p class="notice" role="status">
-    This article has been updated.
-    <button onclick={() => refreshAll()}>Show latest article</button>
+    {i18n.t("common.this_article_has_been_updated")}
+    <button onclick={() => refreshAll()}
+      >{i18n.t("common.show_latest_article")}</button
+    >
   </p>{/if}
 <article class="prose"><RenderedArticle html={data.html} /></article>

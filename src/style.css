@@ -218,6 +218,9 @@ output {
   display: flex;
   gap: 0.5rem;
 }
+.public-wiki .header-search button {
+  white-space: nowrap;
+}
 .public-wiki .header-search input {
   padding: 0.65rem 0.85rem;
   line-height: 1.4;
