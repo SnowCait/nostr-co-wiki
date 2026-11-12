@@ -19,6 +19,16 @@
       }
     ]
   },
+  "previews": {
+    "durable_objects": {
+      "bindings": [
+        {
+          "name": "WIKI",
+          "class_name": "Wiki"
+        }
+      ]
+    }
+  },
   "secrets": {
     "required": [
       "WIKI_PRIVATE_KEY"
