@@ -109,6 +109,18 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
     page.on("pageerror", (error) => failures.push(error.message));
     await page.goto(base);
     assert.match(await page.content(), /No published articles yet/);
+    await page.keyboard.press("Tab");
+    assert.equal(
+      await page
+        .getByRole("link", { name: "Skip to content" })
+        .evaluate((link) => link === globalThis.document.activeElement),
+      true,
+    );
+    await page.keyboard.press("Enter");
+    assert.equal(
+      await page.evaluate(() => globalThis.document.activeElement?.id),
+      "main-content",
+    );
     await page.getByRole("link", { name: "Create article" }).first().click();
     await page.getByLabel("Title (required)").fill("Draft");
     await expect(
@@ -143,8 +155,9 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
     });
     await page.waitForFunction(
       () =>
-        globalThis.document.querySelector<HTMLButtonElement>("form button")
-          ?.disabled === false,
+        globalThis.document.querySelector<HTMLButtonElement>(
+          'form.editor-form button[type="submit"]',
+        )?.disabled === false,
     );
     await page.addInitScript(() => {
       globalThis.nostr = {
@@ -172,7 +185,25 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
     await page
       .getByText("This identifier is available.", { exact: false })
       .waitFor();
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
     await page.getByRole("link", { name: "Other", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    assert.equal(
+      await page.getByLabel("Djot source").inputValue(),
+      "First source\n\n[Other][]",
+    );
+    assert.equal(
+      await page.getByLabel("Title (required)").inputValue(),
+      "日本語 Article",
+    );
+    assert.equal(
+      await page.getByLabel("Summary (optional)", { exact: true }).inputValue(),
+      "Japanese summary",
+    );
+    assert.equal(
+      await page.getByLabel("Edit summary (optional)").inputValue(),
+      "Create article",
+    );
     let publicationChecks = 0;
     await page.route("**/api/article?**", async (route) => {
       if (
@@ -182,6 +213,11 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
         const response = await route.fetch();
         const state = await response.json();
         await route.fulfill({ json: { ...state, reflectsRevision: false } });
+      } else if (
+        new URL(route.request().url()).searchParams.has("revision") &&
+        publicationChecks === 3
+      ) {
+        await route.fulfill({ status: 503 });
       } else {
         await route.continue();
       }
@@ -189,9 +225,16 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
     await page
       .getByRole("button", { name: "Sign and submit Revision" })
       .click();
+    const unconfirmed = page.getByText(
+      "Unable to check publication right now",
+      { exact: false },
+    );
+    await expect(unconfirmed).toBeVisible();
+    await expect(unconfirmed).not.toHaveClass(/success/);
+    await page.getByRole("button", { name: "Check publication" }).click();
     await page.waitForURL(/\/wiki\//);
     assert.ok(
-      publicationChecks >= 3,
+      publicationChecks >= 4,
       "navigation must wait for confirmed publication",
     );
     const d = "日本語-article";
@@ -288,7 +331,7 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
     await page.getByRole("link", { name: "Revision 1", exact: true }).click();
     assert.match(await page.content(), /First source/);
     await page.locator(".diff .added").first().waitFor();
-    await page.getByRole("link", { name: "Restore this content" }).click();
+    await page.getByRole("link", { name: "Prepare restoration" }).click();
     await expect(page.getByLabel("Djot source")).toHaveValue(first.content);
     const restoreBase = (await info(d)).article!.tags.find(
       (tag) => tag[0] === "head",

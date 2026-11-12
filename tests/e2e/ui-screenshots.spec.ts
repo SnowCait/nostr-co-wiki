@@ -42,18 +42,26 @@ test("capture major Wiki screens at desktop and mobile sizes", async ({
     const { url } = await server.listen();
     const base = url.origin;
     const relay = base.replace(/^http/, "ws") + "/relay";
-    const screenshot = (
+    const screenshot = async (
       page: Page,
       state: string,
       viewport: (typeof viewports)[number],
-    ) =>
-      page.screenshot({
+    ) => {
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+        true,
+        state + " must not overflow the viewport",
+      );
+      return page.screenshot({
         path: testInfo.outputPath(
           "ui-screenshots",
           `${state}-${viewport.name}.png`,
         ),
         fullPage: true,
       });
+    };
 
     // Capture both empty home pages before populating the isolated Wiki.
     for (const viewport of viewports) {
@@ -222,6 +230,15 @@ test("capture major Wiki screens at desktop and mobile sizes", async ({
           await page
             .getByText("This identifier is available.", { exact: false })
             .waitFor();
+          if (viewport.width === 390) {
+            await screenshot(page, "article-create-source", viewport);
+            await page
+              .getByRole("button", { name: "Preview", exact: true })
+              .click();
+            await expect(
+              page.getByRole("button", { name: "Preview", exact: true }),
+            ).toHaveAttribute("aria-pressed", "true");
+          }
           await page
             .getByRole("heading", { name: "Draft preview", exact: true })
             .waitFor();
@@ -234,24 +251,55 @@ test("capture major Wiki screens at desktop and mobile sizes", async ({
           await expect(page.getByLabel("Djot source")).toHaveValue(
             currentContent,
           );
+          if (viewport.width === 390) {
+            await page
+              .getByRole("button", { name: "Preview", exact: true })
+              .click();
+          }
           await page
             .getByRole("heading", { name: "Explore the Wiki", exact: true })
             .waitFor();
           await page
             .getByText("Waiting for a NIP-07", { exact: false })
             .waitFor({ state: "hidden" });
+          if (viewport.width === 390) {
+            await screenshot(page, "article-edit-preview", viewport);
+            await page
+              .getByRole("button", { name: "Edit", exact: true })
+              .click();
+            await expect(page.getByLabel("Djot source")).toHaveValue(
+              currentContent,
+            );
+          }
           await screenshot(page, "article-edit-loaded", viewport);
 
           await page.goto(base + "/wiki/getting-started/history");
           await page
             .getByRole("link", { name: "Revision 3", exact: true })
             .waitFor();
+          await expect(page.locator("ol.history > li > a").first()).toHaveText(
+            "Revision 3",
+          );
           await screenshot(page, "history-revisions", viewport);
           await page.goto(
             base + "/wiki/getting-started/history/" + head(second),
           );
           await page.locator(".diff .added").first().waitFor();
           await page.locator(".diff .removed").first().waitFor();
+          const widths = await page
+            .locator(".historical-content")
+            .evaluate((article) => ({
+              article: article.getBoundingClientRect().width,
+              diff: document.querySelector(".diff")!.getBoundingClientRect()
+                .width,
+              rem: parseFloat(
+                getComputedStyle(document.documentElement).fontSize,
+              ),
+            }));
+          assert.ok(widths.article <= 44 * widths.rem);
+          if (viewport.width === 1440) {
+            assert.ok(widths.diff > widths.article);
+          }
           await screenshot(page, "history-detail-diff", viewport);
 
           await page.goto(base + "/admin");

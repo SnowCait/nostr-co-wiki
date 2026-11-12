@@ -32,6 +32,7 @@
   );
   let base = $state(initial.base);
   const d = $derived(data.base ? data.d : normalizeIdentifier(articleTitle));
+  let editorView = $state<"edit" | "preview">("edit");
   let origin = $state("");
   let signingAvailable = $state(false);
   let availability = $state("checking");
@@ -213,30 +214,34 @@
   }
 </script>
 
-{#if data.restored}<p>
+{#if data.restored}<p class="notice">
     Restoring historical content from {data.restored}. Review your draft before
     signing.
   </p>{/if}
-{#if !signingAvailable}<p role="status">
+{#if !signingAvailable}<p class="notice" role="status">
     Waiting for a NIP-07 compatible signing extension. One is required to create
     or edit articles. Reading remains available.
   </p>{/if}
-{#if updated}<p role="status">
+{#if updated}<p class="notice" role="status">
     This article has been updated. Your draft and base Commit are unchanged.
     <a href={resolve("/wiki/[d]", { d })} target="_blank" rel="noopener"
       >View latest article in a new tab</a
     >
   </p>{/if}
-<form onsubmit={submit}>
+<form class="editor-form" onsubmit={submit} aria-busy={busy}>
   <fieldset disabled={busy || !!acceptedId}>
     <label for="title">Title (required)</label><input
       id="title"
       bind:value={articleTitle}
       required
     />
-    <p>Article identifier: <code>{d || "Enter a title"}</code></p>
-    <p>Article URL: <output>{origin}{articlePath(d)}</output></p>
-    {#if !data.base}<p aria-live="polite">
+    <p class="metadata">
+      Article identifier: <code>{d || "Enter a title"}</code>
+    </p>
+    <p class="metadata">
+      Article URL: <output>{origin}{articlePath(d)}</output>
+    </p>
+    {#if !data.base}<p class="availability" aria-live="polite">
         {#if availability === "published"}This article already exists. <a
             href={resolve("/wiki/[d]", { d })}>Read the existing article</a
           >. Submission is unavailable.
@@ -248,32 +253,75 @@
           Please try changing the title again.
         {:else}Enter a title that produces a valid identifier.{/if}
       </p>{/if}
-    <label for="content">Djot source</label><textarea
-      id="content"
-      bind:value={content}
-      rows="18"></textarea>
-    <label for="summary">Summary (optional)</label><textarea
-      id="summary"
-      bind:value={summary}
-      rows="2"></textarea>
-    <label for="edit-summary">Edit summary (optional)</label><input
-      id="edit-summary"
-      bind:value={editSummary}
-    />
-    <button
-      disabled={!signingAvailable ||
-        !articleTitle.trim() ||
-        !d ||
-        (!data.base && availability !== "available")}
-      >Sign and submit Revision</button
-    >
+    <div class="editor-switch" role="group" aria-label="Editor view">
+      <button
+        type="button"
+        aria-controls="editor-source"
+        aria-pressed={editorView === "edit"}
+        onclick={() => (editorView = "edit")}>Edit</button
+      >
+      <button
+        type="button"
+        aria-controls="editor-preview"
+        aria-pressed={editorView === "preview"}
+        onclick={() => (editorView = "preview")}>Preview</button
+      >
+    </div>
+    <div class="editor-grid">
+      <section
+        id="editor-source"
+        class="source-pane"
+        class:mobile-hidden={editorView !== "edit"}
+      >
+        <h2><label for="content">Djot source</label></h2>
+        <textarea id="content" bind:value={content} rows="18"></textarea>
+      </section>
+      <section
+        id="editor-preview"
+        class="preview-pane"
+        class:mobile-hidden={editorView !== "preview"}
+        aria-label="Article preview"
+      >
+        <h2>HTML preview</h2>
+        {#if previewError}<p role="alert">{previewError}</p>{/if}
+        <div class="prose"><RenderedArticle html={preview} /></div>
+      </section>
+    </div>
+    <div class="editor-details">
+      <label for="summary">Summary (optional)</label><textarea
+        id="summary"
+        bind:value={summary}
+        rows="2"></textarea>
+      <label for="edit-summary">Edit summary (optional)</label><input
+        id="edit-summary"
+        bind:value={editSummary}
+      />
+      <button
+        type="submit"
+        class="primary"
+        disabled={!signingAvailable ||
+          !articleTitle.trim() ||
+          !d ||
+          (!data.base && availability !== "available")}
+        >Sign and submit Revision</button
+      >
+    </div>
   </fieldset>
 </form>
-<p role="status" aria-live="polite">{notice}</p>
+{#if notice}<p
+    class="notice"
+    class:error={["conflict", "rejected", "signing", "connection"].includes(
+      outcome,
+    )}
+    role="status"
+    aria-live="polite"
+  >
+    {notice}
+  </p>{/if}
 {#if acceptedId}<button onclick={checkPublication} disabled={busy}
     >Check publication</button
   >{/if}
-{#if outcome === "conflict"}<section>
+{#if outcome === "conflict"}<section class="conflict-section">
     <h2>Resolve the edit conflict</h2>
     <p>
       Your draft has been preserved. Review the latest article, manually adjust
@@ -292,8 +340,3 @@
         }}>Use this Commit as base</button
       >{/if}
   </section>{/if}
-<section>
-  <h2>HTML preview</h2>
-  {#if previewError}<p role="alert">{previewError}</p>{/if}
-  <div class="prose"><RenderedArticle html={preview} /></div>
-</section>
