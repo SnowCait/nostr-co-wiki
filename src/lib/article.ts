@@ -8,11 +8,18 @@ export function articlePath(d: string): `/wiki/${string}` {
 export function title(event: Event): string {
   return tag(event, "title") ?? tag(event, "d") ?? "Untitled";
 }
-export function date(timestamp: number): string {
-  return new Date(timestamp * 1000)
-    .toISOString()
-    .replace("T", " ")
-    .replace(".000Z", " UTC");
+export function date(timestamp: number, locale = "en"): string {
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+    timeZoneName: "short",
+  }).format(new Date(timestamp * 1000));
 }
 
 export interface ArticleResponse {

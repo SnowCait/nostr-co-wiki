@@ -283,6 +283,16 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
       .getByLabel("Summary (optional)", { exact: true })
       .fill("Draft summary");
     await page.getByLabel("Edit summary (optional)").fill("Draft edit summary");
+    await page.getByLabel("Language", { exact: true }).selectOption("ja");
+    await expect(page.locator("html")).toHaveAttribute("lang", "ja");
+    await expect(page.locator("#content")).toHaveValue("My preserved edit\n");
+    await expect(page.locator("#summary")).toHaveValue("Draft summary");
+    await expect(page.locator("#edit-summary")).toHaveValue(
+      "Draft edit summary",
+    );
+    await page.getByLabel("表示言語", { exact: true }).selectOption("en");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+
     await page.evaluate(() => {
       globalThis.nostr.signEvent = async () => {
         throw new Error("Declined");

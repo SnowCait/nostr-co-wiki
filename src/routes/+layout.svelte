@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { use } from "#lib/i18n.ts";
+  import LanguageSwitcher from "#lib/components/LanguageSwitcher.svelte";
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import type { Snippet } from "svelte";
@@ -7,33 +9,42 @@
     children,
     data,
   }: { children: Snippet; data: import("./$types").LayoutData } = $props();
+  const i18n = use(() => data);
 </script>
 
 <div class:public-wiki={!data.administration}>
   {#if !data.administration}
-    <a class="skip-link" href="#main-content">Skip to content</a>
+    <a class="skip-link" href="#main-content"
+      >{i18n.t("common.skip_to_content")}</a
+    >
     <header class="site-header">
-      <nav aria-label="Main">
+      <nav aria-label={i18n.t("common.main")}>
         <a class="wordmark" href={resolve("/")}>NostrCoWiki</a>
         {#if page.route.id !== "/" && page.route.id !== "/search"}<form
             class="header-search"
             action="/search"
             method="GET"
             role="search"
-            aria-label="Site search"
+            aria-label={i18n.t("common.site_search")}
           >
-            <label class="sr-only" for="header-search">Search the Wiki</label>
+            <label class="sr-only" for="header-search"
+              >{i18n.t("common.search_the_wiki")}</label
+            >
             <input
               id="header-search"
               name="q"
               type="search"
-              placeholder="Search the Wiki"
+              placeholder={i18n.t("common.search_the_wiki")}
               required
             />
-            <button>Search</button>
+            <button>{i18n.t("common.search")}</button>
           </form>{/if}
-        <a class="mobile-search" href={resolve("/search")}>Search</a>
-        <a class="create-link" href={resolve("/new")}>Create article</a>
+        <a class="mobile-search" href={resolve("/search")}
+          >{i18n.t("common.search")}</a
+        >
+        <a class="create-link" href={resolve("/new")}
+          >{i18n.t("common.create_article")}</a
+        >
       </nav>
     </header>
   {/if}
@@ -45,9 +56,11 @@
     {@render children()}
   </main>
   {#if data.administration}<footer>
-      A collaboratively edited Wiki on Nostr.
+      {i18n.t("common.a_collaboratively_edited_wiki_on_nostr")}
+      <LanguageSwitcher />
     </footer>{:else}<footer>
       <span>NostrCoWiki</span>
-      <p>A collaboratively edited Wiki on Nostr.</p>
+      <p>{i18n.t("common.a_collaboratively_edited_wiki_on_nostr")}</p>
+      <LanguageSwitcher />
     </footer>{/if}
 </div>

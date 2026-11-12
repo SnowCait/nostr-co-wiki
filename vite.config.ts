@@ -1,3 +1,4 @@
+import { typegen } from "@sveltekit-i18n/typegen";
 import adapter from "@sveltejs/adapter-cloudflare";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
@@ -17,5 +18,12 @@ writeFileSync(
   }),
 );
 export default defineConfig({
-  plugins: [sveltekit({ adapter: adapter({ config: adapterConfig }) })],
+  plugins: [
+    sveltekit({ adapter: adapter({ config: adapterConfig }) }),
+    typegen({
+      config: "src/lib/i18n.ts",
+      extractParams: { from: "sveltekit-i18n" },
+      referenceLocale: "en",
+    }),
+  ],
 });

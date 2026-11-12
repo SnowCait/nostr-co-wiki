@@ -86,3 +86,9 @@ Dashboard-managed runtime variables are preserved by `keep_vars`.
 The single root `wrangler.json` declares the `WIKI` binding and its SQLite class
 export. No separate Relay Worker deployment is needed. Existing Durable Object
 data migration is outside the scope of this structure change.
+
+### UI languages
+
+The Web UI supports English and Japanese using sveltekit-i18n v3's SvelteKit integration. Each SSR request gets an independent instance. A manual `lang` cookie takes priority over `Accept-Language`, with English as the fallback. The footer switches language without navigating or remounting the editor. URLs and user content stay intact; dates use the selected locale with UTC.
+
+Edit `src/lib/translations/{en,ja}/common.json`. Curly messages use `{{name}}` for interpolation and `{{number:number}}` for numeric parameters. The official typegen Vite plugin generates the ignored `src/i18n-schema.d.ts`; `npm run check` builds before checking types, and `npm test` reuses that build. No manual generation is needed after `npm ci`. `src/i18n.typecheck.ts` checks invalid keys and payloads, while unit tests compare keys and parser-defined parameters across languages. Plain Node tests import the parser's build-time extractor, without creating a rune-based i18n instance.

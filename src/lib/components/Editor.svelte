@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { get, type NoticeKey } from "#lib/i18n.ts";
+  const i18n = get();
   import { subscribeArticle } from "#lib/article-updates.ts";
   import RenderedArticle from "#lib/components/RenderedArticle.svelte";
   import { resolve } from "$app/paths";
@@ -40,9 +42,12 @@
   let signingAvailable = $state(false);
   let availability = $state("checking");
   let preview = $state("");
-  let previewError = $state("");
+  let previewError = $state<NoticeKey | "">("");
   let busy = $state(false);
-  let notice = $state("");
+  let notice = $state<NoticeKey | "">("");
+  let submission = $state<import("#lib/submission.ts").SubmissionResult | null>(
+    null,
+  );
   let outcome = $state("");
   let acceptedId = $state("");
   let updated = $state(false);
@@ -119,7 +124,8 @@
         }
       } catch {
         if (!controller.signal.aborted) {
-          previewError = "Preview is unavailable. Your source is preserved.";
+          previewError =
+            "common.preview_is_unavailable_your_source_is_preserved";
         }
       }
     }, 250);
@@ -163,10 +169,10 @@
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
       notice =
-        "Your Revision was accepted, but publication is not yet confirmed. You can check again.";
+        "common.your_revision_was_accepted_but_publication_is_not_yet_confirmed_you_can_check_again";
     } catch {
       notice =
-        "Your Revision was accepted. Unable to check publication right now; check again before resubmitting.";
+        "common.your_revision_was_accepted_unable_to_check_publication_right_now_check_again_before_resubmitting";
     } finally {
       busy = false;
     }
@@ -180,15 +186,16 @@
       latest = ((await response.json()) as { article: Event | null }).article;
       if (!latest) {
         notice =
-          "This article is no longer publicly available. Your draft is preserved.";
+          "common.this_article_is_no_longer_publicly_available_your_draft_is_preserved";
       }
     } catch {
-      notice = "Unable to load the latest article. Your draft is preserved.";
+      notice =
+        "common.unable_to_load_the_latest_article_your_draft_is_preserved";
     }
   }
   async function submit(event: SubmitEvent) {
     event.preventDefault();
-    notice = "Waiting for your signing extension and Relay response…";
+    notice = "common.waiting_for_your_signing_extension_and_relay_response";
     outcome = "";
     busy = true;
     latest = null;
@@ -206,7 +213,8 @@
       }),
     );
     outcome = result.type;
-    notice = result.message;
+    notice = "";
+    submission = result;
     busy = false;
     if (result.type === "accepted" && result.id) {
       acceptedId = result.id;
@@ -218,22 +226,24 @@
 </script>
 
 {#if data.restored}<p class="notice">
-    Restoring historical content from {data.restored}. Review your draft before
-    signing.
+    {i18n.t("common.restoration_notice", { revision: data.restored })}
   </p>{/if}
 {#if !signingAvailable}<p class="notice" role="status">
-    Waiting for a NIP-07 compatible signing extension. One is required to create
-    or edit articles. Reading remains available.
+    {i18n.t(
+      "common.waiting_for_a_nip_07_compatible_signing_extension_one_is_required_to_create_or_edit_articles_reading_remains_available",
+    )}
   </p>{/if}
 {#if updated}<p class="notice" role="status">
-    This article has been updated. Your draft and base Commit are unchanged.
+    {i18n.t(
+      "common.this_article_has_been_updated_your_draft_and_base_commit_are_unchanged",
+    )}
     <a href={resolve("/wiki/[d]", { d })} target="_blank" rel="noopener"
-      >View latest article in a new tab</a
+      >{i18n.t("common.view_latest_article_in_a_new_tab")}</a
     >
   </p>{/if}
 <form class="editor-form" onsubmit={submit} aria-busy={busy}>
   <fieldset disabled={busy || !!acceptedId}>
-    <label for="title">Title (required)</label><input
+    <label for="title">{i18n.t("common.title_required")}</label><input
       id="title"
       bind:value={articleTitle}
       readonly={!!data.base}
@@ -241,36 +251,53 @@
     />
     <div class="article-address">
       <p class="metadata">
-        Article identifier: <code>{d || "Enter a title"}</code>
+        {i18n.t("common.article_identifier")}
+        <code>{d || i18n.t("common.enter_a_title")}</code>
       </p>
       <p class="metadata">
-        Article URL: <output>{origin}{articlePath(d)}</output>
+        {i18n.t("common.article_url")} <output>{origin}{articlePath(d)}</output>
       </p>
       {#if !data.base}<p class="availability" aria-live="polite">
-          {#if availability === "published"}This article already exists. <a
-              href={resolve("/wiki/[d]", { d })}>Read the existing article</a
-            >. Submission is unavailable.
-          {:else if availability === "unpublished"}This URL is unavailable.
-          {:else if availability === "available"}This identifier is available.
-            It is not reserved.
-          {:else if availability === "checking"}Checking the identifier…
-          {:else if availability === "error"}Unable to check this identifier.
-            Please try changing the title again.
-          {:else}Enter a title that produces a valid identifier.{/if}
+          {#if availability === "published"}{i18n.t(
+              "common.this_article_already_exists",
+            )}
+            <a href={resolve("/wiki/[d]", { d })}
+              >{i18n.t("common.read_the_existing_article")}</a
+            >{i18n.t("common.submission_is_unavailable")}
+          {:else if availability === "unpublished"}{i18n.t(
+              "common.this_url_is_unavailable",
+            )}
+          {:else if availability === "available"}{i18n.t(
+              "common.this_identifier_is_available_it_is_not_reserved",
+            )}
+          {:else if availability === "checking"}{i18n.t(
+              "common.checking_the_identifier",
+            )}
+          {:else if availability === "error"}{i18n.t(
+              "common.unable_to_check_this_identifier_please_try_changing_the_title_again",
+            )}
+          {:else}{i18n.t(
+              "common.enter_a_title_that_produces_a_valid_identifier",
+            )}{/if}
         </p>{/if}
     </div>
-    <div class="editor-switch" role="group" aria-label="Editor view">
+    <div
+      class="editor-switch"
+      role="group"
+      aria-label={i18n.t("common.editor_view")}
+    >
       <button
         type="button"
         aria-controls="editor-source"
         aria-pressed={editorView === "edit"}
-        onclick={() => (editorView = "edit")}>Edit</button
+        onclick={() => (editorView = "edit")}>{i18n.t("common.edit")}</button
       >
       <button
         type="button"
         aria-controls="editor-preview"
         aria-pressed={editorView === "preview"}
-        onclick={() => (editorView = "preview")}>Preview</button
+        onclick={() => (editorView = "preview")}
+        >{i18n.t("common.preview")}</button
       >
     </div>
     <div class="editor-grid">
@@ -279,29 +306,27 @@
         class="source-pane"
         class:mobile-hidden={editorView !== "edit"}
       >
-        <h2><label for="content">Djot source</label></h2>
+        <h2><label for="content">{i18n.t("common.djot_source")}</label></h2>
         <textarea id="content" bind:value={content} rows="18"></textarea>
       </section>
       <section
         id="editor-preview"
         class="preview-pane"
         class:mobile-hidden={editorView !== "preview"}
-        aria-label="Article preview"
+        aria-label={i18n.t("common.article_preview")}
       >
-        <h2>HTML preview</h2>
-        {#if previewError}<p role="alert">{previewError}</p>{/if}
+        <h2>{i18n.t("common.html_preview")}</h2>
+        {#if previewError}<p role="alert">{i18n.t(previewError)}</p>{/if}
         <div class="prose"><RenderedArticle html={preview} /></div>
       </section>
     </div>
     <div class="editor-details">
-      <label for="summary">Summary (optional)</label><textarea
+      <label for="summary">{i18n.t("common.summary_optional")}</label><textarea
         id="summary"
         bind:value={summary}
         rows="2"></textarea>
-      <label for="edit-summary">Edit summary (optional)</label><input
-        id="edit-summary"
-        bind:value={editSummary}
-      />
+      <label for="edit-summary">{i18n.t("common.edit_summary_optional")}</label
+      ><input id="edit-summary" bind:value={editSummary} />
       <button
         type="submit"
         class="primary"
@@ -310,7 +335,7 @@
           (!!base && content === baseContent && summary === baseSummary) ||
           !d ||
           (!data.base && availability !== "available")}
-        >Sign and submit Revision</button
+        >{i18n.t("common.sign_and_submit_revision")}</button
       >
     </div>
   </fieldset>
@@ -323,20 +348,38 @@
     role="status"
     aria-live="polite"
   >
-    {notice}
+    {i18n.t(notice)}
+  </p>{/if}
+{#if submission && !notice}<p class="notice" role="status">
+    {#if submission.type === "accepted"}{i18n.t(
+        "common.revision_accepted_checking_publication",
+      )}
+    {:else if submission.type === "connection"}{i18n.t(
+        "common.no_acceptance_confirmation_was_received_your_draft_is_preserved_check_the_article_before_resubmitting",
+      )}
+    {:else if submission.type === "signing"}{i18n.t(
+        "common.signing_was_declined_or_the_signer_returned_an_invalid_revision_your_draft_is_preserved",
+      )}
+    {:else}{i18n.t("common.relay_rejection", {
+        reason: submission.message,
+      })}{/if}
   </p>{/if}
 {#if acceptedId}<button onclick={checkPublication} disabled={busy}
-    >Check publication</button
+    >{i18n.t("common.check_publication")}</button
   >{/if}
 {#if outcome === "conflict"}<section class="conflict-section">
-    <h2>Resolve the edit conflict</h2>
+    <h2>{i18n.t("common.resolve_the_edit_conflict")}</h2>
     <p>
-      Your draft has been preserved. Review the latest article, manually adjust
-      your changes, then choose its Commit as your new base.
+      {i18n.t(
+        "common.your_draft_has_been_preserved_review_the_latest_article_manually_adjust_your_changes_then_choose_its_commit_as_your_new_base",
+      )}
     </p>
     <a href={resolve("/wiki/[d]", { d })} target="_blank" rel="noopener"
-      >Open latest article</a
-    > <button onclick={loadLatest}>Refresh latest article</button>
+      >{i18n.t("common.open_latest_article")}</a
+    >
+    <button onclick={loadLatest}
+      >{i18n.t("common.refresh_latest_article")}</button
+    >
     {#if latest}<h3>{tag(latest, "title") ?? d}</h3>
       <pre>{latest.content}</pre>
       <button
@@ -345,7 +388,7 @@
           baseContent = latest!.content;
           baseSummary = tag(latest!, "summary") ?? "";
           notice =
-            "Using the displayed Commit as base. Your draft is unchanged; review it before resubmitting.";
-        }}>Use this Commit as base</button
+            "common.using_the_displayed_commit_as_base_your_draft_is_unchanged_review_it_before_resubmitting";
+        }}>{i18n.t("common.use_this_commit_as_base")}</button
       >{/if}
   </section>{/if}
