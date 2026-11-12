@@ -436,6 +436,29 @@ test("capture major Wiki screens at desktop and mobile sizes", async ({
               ).toHaveValue(currentContent);
             }
             await screenshot(page, "article-edit-loaded", viewport, language);
+            await page.locator("#content").fill("Draft body");
+            await page.locator("#summary").fill("Draft summary");
+            await page.locator("#edit-summary").fill("Draft edit summary");
+            const editUrl = page.url();
+            await page
+              .locator("footer select")
+              .selectOption(language === "en" ? "ja" : "en");
+            await expect(page.locator("html")).toHaveAttribute(
+              "lang",
+              language === "en" ? "ja" : "en",
+            );
+            await expect(page.locator("#title")).toHaveValue("Getting started");
+            await expect(page.locator("#content")).toHaveValue("Draft body");
+            await expect(page.locator("#summary")).toHaveValue("Draft summary");
+            await expect(page.locator("#edit-summary")).toHaveValue(
+              "Draft edit summary",
+            );
+            expect(page.url()).toBe(editUrl);
+            await page.locator("footer select").selectOption(language);
+            await expect(page.locator("html")).toHaveAttribute(
+              "lang",
+              language,
+            );
 
             await page.goto(base + "/wiki/getting-started/history");
             await page
