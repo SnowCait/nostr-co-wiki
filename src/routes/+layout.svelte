@@ -1,5 +1,6 @@
 <script lang="ts">
   import { use } from "#lib/i18n.ts";
+  import { refreshLanguageCookie } from "#lib/language-cookie.ts";
   import LanguageSwitcher from "#lib/components/LanguageSwitcher.svelte";
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
@@ -11,12 +12,7 @@
     data,
   }: { children: Snippet; data: import("./$types").LayoutData } = $props();
   const i18n = use(() => data);
-  onMount(() => {
-    const locale = document.cookie.match(/(?:^|;\s*)lang=(en|ja)(?:;|$)/)?.[1];
-    if (locale) {
-      document.cookie = `lang=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
-    }
-  });
+  onMount(refreshLanguageCookie);
 </script>
 
 <div class:public-wiki={!data.administration}>
