@@ -3,6 +3,7 @@
   import LanguageSwitcher from "#lib/components/LanguageSwitcher.svelte";
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
+  import { onMount } from "svelte";
   import type { Snippet } from "svelte";
   import "../style.css";
   let {
@@ -10,6 +11,12 @@
     data,
   }: { children: Snippet; data: import("./$types").LayoutData } = $props();
   const i18n = use(() => data);
+  onMount(() => {
+    const locale = document.cookie.match(/(?:^|;\s*)lang=(en|ja)(?:;|$)/)?.[1];
+    if (locale) {
+      document.cookie = `lang=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    }
+  });
 </script>
 
 <div class:public-wiki={!data.administration}>
