@@ -278,7 +278,7 @@ test(
       async () => {
         assert.match(
           await (await web.fetch("/")).text(),
-          /<h1>NostrCoWiki<\/h1>/,
+          /<h1>Explore the Wiki<\/h1>/,
         );
         assert.equal(await wiki.getArticle("missing"), null);
         assert.deepEqual(await wiki.getHistory("missing"), []);

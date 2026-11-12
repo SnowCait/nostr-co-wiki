@@ -382,8 +382,8 @@ test("public Wiki browser flow uses real Workers, signing, Relay acceptance and 
     const diffHtml = await (
       await request(articlePath + "/history/" + secondCommit)
     ).text();
-    assert.match(diffHtml, /class="removed"|class="removed /);
-    assert.match(diffHtml, /class="added"|class="added /);
+    assert.match(diffHtml, /class="[^"]*\bremoved\b[^"]*"/);
+    assert.match(diffHtml, /class="[^"]*\badded\b[^"]*"/);
     assert.equal((await publish("ranking", "exact match")).type, "accepted");
     assert.equal(
       (await publish("ranking-guide", "partial match")).type,

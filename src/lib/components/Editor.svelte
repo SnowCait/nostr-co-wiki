@@ -235,24 +235,26 @@
       bind:value={articleTitle}
       required
     />
-    <p class="metadata">
-      Article identifier: <code>{d || "Enter a title"}</code>
-    </p>
-    <p class="metadata">
-      Article URL: <output>{origin}{articlePath(d)}</output>
-    </p>
-    {#if !data.base}<p class="availability" aria-live="polite">
-        {#if availability === "published"}This article already exists. <a
-            href={resolve("/wiki/[d]", { d })}>Read the existing article</a
-          >. Submission is unavailable.
-        {:else if availability === "unpublished"}This URL is unavailable.
-        {:else if availability === "available"}This identifier is available. It
-          is not reserved.
-        {:else if availability === "checking"}Checking the identifier…
-        {:else if availability === "error"}Unable to check this identifier.
-          Please try changing the title again.
-        {:else}Enter a title that produces a valid identifier.{/if}
-      </p>{/if}
+    <div class="article-address">
+      <p class="metadata">
+        Article identifier: <code>{d || "Enter a title"}</code>
+      </p>
+      <p class="metadata">
+        Article URL: <output>{origin}{articlePath(d)}</output>
+      </p>
+      {#if !data.base}<p class="availability" aria-live="polite">
+          {#if availability === "published"}This article already exists. <a
+              href={resolve("/wiki/[d]", { d })}>Read the existing article</a
+            >. Submission is unavailable.
+          {:else if availability === "unpublished"}This URL is unavailable.
+          {:else if availability === "available"}This identifier is available.
+            It is not reserved.
+          {:else if availability === "checking"}Checking the identifier…
+          {:else if availability === "error"}Unable to check this identifier.
+            Please try changing the title again.
+          {:else}Enter a title that produces a valid identifier.{/if}
+        </p>{/if}
+    </div>
     <div class="editor-switch" role="group" aria-label="Editor view">
       <button
         type="button"

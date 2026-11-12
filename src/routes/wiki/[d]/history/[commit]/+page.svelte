@@ -10,7 +10,6 @@
   ><title>Revision {tag(data.entry.commit, "seq")} — NostrCoWiki</title
   ></svelte:head
 >
-<p class="eyebrow">Revision record</p>
 <h1>{title(data.article)} — Revision {tag(data.entry.commit, "seq")}</h1>
 <ArticleNav d={tag(data.article, "d")!} current="history" />
 <p class="metadata">{date(data.entry.commit.created_at)}</p>
@@ -32,25 +31,38 @@
   </p>
   <p>{tag(data.entry.revision, "edit_summary") ?? "No edit summary"}</p>
 
-  <h2>Changes from the preceding Revision</h2>
-  {#if data.changes}<div class="diff">
-      {#each data.changes as change, index (index)}<pre
+  <h2 class="section-label">Changes from the preceding Revision</h2>
+  {#if data.changes}<div
+      class="diff"
+      role="region"
+      aria-label="Revision differences"
+      tabindex="0"
+    >
+      {#each data.changes as change, index (index)}<div
+          class="diff-block"
           class:added={change.added}
-          class:removed={change.removed}><span class="sr-only"
+          class:removed={change.removed}
+        >
+          <span class="sr-only"
             >{change.added
               ? "Added"
               : change.removed
                 ? "Removed"
-                : "Unchanged"}: </span><span aria-hidden="true"
+                : "Unchanged"}:
+          </span><span class="diff-sign" aria-hidden="true"
             >{change.added ? "+" : change.removed ? "−" : " "}</span
-          >{change.value}</pre>{/each}
+          >
+          <pre>{change.value}</pre>
+        </div>{/each}
     </div>{:else}<p>
       The preceding Revision is unavailable, so differences cannot be computed.
     </p>{/if}
-  <h2>Article at this Revision</h2>
-  <article class="prose historical-content">
-    <RenderedArticle html={data.html ?? ""} />
-  </article>{:else}<p>
+  <section class="historical-document">
+    <h2 class="section-label">Article at this Revision</h2>
+    <article class="prose historical-content">
+      <RenderedArticle html={data.html ?? ""} />
+    </article>
+  </section>{:else}<p>
     Historical Revision unavailable. Its content and editor signature cannot be
     verified from the Commit alone.
   </p>{/if}

@@ -4,7 +4,6 @@
 </script>
 
 <svelte:head><title>Search — NostrCoWiki</title></svelte:head>
-<p class="eyebrow">Explore the encyclopedia</p>
 <h1>Search articles</h1>
 <form
   class="hero-search"

@@ -54,6 +54,23 @@ test("capture major Wiki screens at desktop and mobile sizes", async ({
         true,
         state + " must not overflow the viewport",
       );
+      if (await page.locator(".public-wiki").count()) {
+        const edges = await page.evaluate(() =>
+          [
+            document.querySelector(".wordmark")!,
+            document.querySelector("main")!,
+            document.querySelector("footer > span")!,
+          ].map((element) => element.getBoundingClientRect().left),
+        );
+        assert.ok(
+          Math.max(...edges) - Math.min(...edges) <= 1,
+          state + " aligns header, main and footer",
+        );
+        const path = new URL(page.url()).pathname;
+        await expect(
+          page.getByRole("search", { name: "Site search" }),
+        ).toHaveCount(path === "/" || path === "/search" ? 0 : 1);
+      }
       return page.screenshot({
         path: testInfo.outputPath(
           "ui-screenshots",
