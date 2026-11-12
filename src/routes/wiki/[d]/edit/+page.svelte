@@ -5,7 +5,6 @@
 </script>
 
 <svelte:head><title>Edit {data.title} — NostrCoWiki</title></svelte:head>
-<p class="eyebrow">Contribute to the encyclopedia</p>
 <h1>Edit {data.title}</h1>
 <ArticleNav d={data.d} current="edit" />
 {#key data.d + (data.restored ?? "")}<Editor {data} />{/key}

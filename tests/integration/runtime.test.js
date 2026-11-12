@@ -108,7 +108,7 @@ test(
     assert.ok(response, output);
     assert.equal(response.status, 200, output);
     const html = await response.text();
-    assert.match(html, /<h1>NostrCoWiki<\/h1>/);
+    assert.match(html, /<h1>Explore the Wiki<\/h1>/);
     assert.equal((await fetch("http://localhost:18787/relay")).status, 426);
   },
 );

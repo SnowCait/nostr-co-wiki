@@ -4,6 +4,5 @@
 </script>
 
 <svelte:head><title>Create article — NostrCoWiki</title></svelte:head>
-<p class="eyebrow">Contribute to the encyclopedia</p>
 <h1>Create article</h1>
 <Editor {data} />
