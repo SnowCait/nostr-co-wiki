@@ -1,7 +1,5 @@
-import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, mkdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, dirname, resolve } from "node:path";
+import { readFile, readdir } from "node:fs/promises";
+import { join } from "node:path";
 import { seedWiki } from "./seed-preview.ts";
 
 export function previewURL(
@@ -47,7 +45,55 @@ export function previewURL(
   }
   throw new Error("No verified workers.dev Preview URL");
 }
-export async function deployAndSeed() {
+// The npm script records its start before running Wrangler. Record timestamps
+// distinguish this invocation from previous output without modifying its destination.
+export async function readPreviewOutput(worker: string, branch: string) {
+  const started = Number(process.env.WIKI_PREVIEW_STARTED_AT);
+  const now = Date.now();
+  if (!Number.isSafeInteger(started) || started <= 0 || started > now) {
+    throw new Error("Missing or invalid Preview invocation start time");
+  }
+  const file = process.env.WRANGLER_OUTPUT_FILE_PATH;
+  const directory = process.env.WRANGLER_OUTPUT_FILE_DIRECTORY;
+  let paths: string[];
+  if (file) {
+    paths = [file];
+  } else if (directory) {
+    paths = (await readdir(directory))
+      .filter((name) => /^wrangler-output-.+\.json$/.test(name))
+      .map((name) => join(directory, name));
+  } else {
+    throw new Error("Wrangler output destination is not configured");
+  }
+  const candidates: URL[] = [];
+  for (const path of paths) {
+    const records = (await readFile(path, "utf8"))
+      .split("\n")
+      .filter((line) => line.trim())
+      .map((line) => JSON.parse(line));
+    for (const record of records) {
+      const timestamp = Date.parse(record.timestamp);
+      if (
+        record.type !== "preview" ||
+        record.worker_name !== worker ||
+        record.preview_name !== branch ||
+        !Number.isFinite(timestamp) ||
+        timestamp < started ||
+        timestamp > now
+      ) {
+        continue;
+      }
+      candidates.push(previewURL(record, worker, branch));
+    }
+  }
+  if (candidates.length !== 1) {
+    throw new Error(
+      `Expected one current Preview deployment; found ${candidates.length}`,
+    );
+  }
+  return candidates[0];
+}
+export async function seedDeployedPreview() {
   const branch = process.env.WORKERS_CI_BRANCH;
   if (process.env.WORKERS_CI !== "1" || !branch || branch === "main") {
     throw new Error("Run only as a Workers Builds Preview command");
@@ -55,62 +101,11 @@ export async function deployAndSeed() {
   const { name } = JSON.parse(
     await readFile(new URL("../wrangler.json", import.meta.url), "utf8"),
   );
-  const directory = await mkdtemp(join(tmpdir(), "wiki-preview-"));
-  // Preserve Builds' output file (or output directory) so its PR notification
-  // still receives Wrangler's unchanged structured Preview record.
-  const output =
-    process.env.WRANGLER_OUTPUT_FILE_PATH ??
-    join(
-      process.env.WRANGLER_OUTPUT_FILE_DIRECTORY ?? directory,
-      `wiki-preview-${Date.now()}.json`,
-    );
-  try {
-    await mkdir(dirname(output), { recursive: true });
-    const before = await readFile(output, "utf8").catch((error) => {
-      if (error.code !== "ENOENT") {
-        throw error;
-      }
-      return "";
-    });
-    const code = await new Promise<number>((resolveExit, reject) => {
-      const child = spawn(
-        process.execPath,
-        [
-          resolve("node_modules/wrangler/bin/wrangler.js"),
-          "preview",
-          "--name",
-          branch,
-        ],
-        {
-          stdio: "inherit",
-          env: { ...process.env, WRANGLER_OUTPUT_FILE_PATH: output },
-        },
-      );
-      child.on("error", reject);
-      child.on("exit", (code) => resolveExit(code ?? 1));
-    });
-    if (code !== 0) {
-      process.exitCode = code;
-      throw new Error(`Wrangler preview failed (${code})`);
-    }
-    const records = (await readFile(output, "utf8"))
-      .slice(before.length)
-      .trim()
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => JSON.parse(line));
-    const previews = records.filter((record) => record.type === "preview");
-    if (previews.length !== 1) {
-      throw new Error("Expected one Preview deployment record");
-    }
-    await seedWiki(previewURL(previews[0], name, branch));
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
+  await seedWiki(await readPreviewOutput(name, branch));
 }
 if (import.meta.main) {
-  deployAndSeed().catch((error) => {
+  seedDeployedPreview().catch((error) => {
     console.error(error);
-    process.exitCode ||= 1;
+    process.exitCode = 1;
   });
 }
