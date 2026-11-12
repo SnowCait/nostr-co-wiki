@@ -17,6 +17,7 @@
   <a href={resolve("/wiki/[d]/history", { d: tag(data.article, "d")! })}
     >All revisions</a
   >{#if data.entry.revision}<a
+      class="restore-action"
       href={resolve(`/wiki/[d]/edit?restore=${data.entry.commit.id}`, {
         d: tag(data.article, "d")!,
       })}>Prepare restoration</a

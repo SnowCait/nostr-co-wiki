@@ -287,12 +287,11 @@ output {
   overflow-wrap: anywhere;
 }
 .public-wiki .hero-search {
-  margin: 2rem 0 3rem;
+  margin: 1.5rem 0 2.5rem;
   padding: 1.5rem;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   max-width: 44rem;
-  margin-block: 1.5rem 2.5rem;
 }
 .public-wiki .hero-search label {
   margin: 0 0 0.75rem;
@@ -422,8 +421,7 @@ output {
   border-top: 1px solid #e2e8f0;
   border-bottom: 1px solid #e2e8f0;
   margin-top: 1rem;
-  padding: 0 0 2rem;
-  padding-bottom: 0;
+  padding: 0;
   background: #f8fafc;
 }
 .public-wiki .editor-grid section {
@@ -500,6 +498,16 @@ output {
 .public-wiki .revision-actions a {
   padding: 0.5rem 0;
 }
+.public-wiki .revision-actions a.restore-action {
+  padding: 0.6rem 1rem;
+  border: 1px solid #64748b;
+  border-radius: 3px;
+  background: #f8fafc;
+  text-decoration: none;
+}
+.public-wiki .revision-actions a.restore-action:hover {
+  background: #e2e8f0;
+}
 .public-wiki .historical-content {
   max-width: 44rem;
 }
@@ -531,7 +539,6 @@ output {
   color: #475569;
   font-size: 14px;
   padding: 2rem max(1.5rem, calc((100% - 75rem) / 2));
-  padding-inline: max(1.5rem, calc((100% - 75rem) / 2));
 }
 .public-wiki footer > span {
   font-weight: 600;

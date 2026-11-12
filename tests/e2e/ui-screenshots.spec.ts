@@ -318,6 +318,10 @@ test("capture major Wiki screens at desktop and mobile sizes", async ({
             assert.ok(widths.diff > widths.article);
           }
           await screenshot(page, "history-detail-diff", viewport);
+          await page.getByRole("link", { name: "All revisions" }).click();
+          await expect(
+            page.getByRole("link", { name: "Revision 3", exact: true }),
+          ).toBeVisible();
 
           await page.goto(base + "/admin");
           await page
