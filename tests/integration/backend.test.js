@@ -499,7 +499,7 @@ test(
       "accepts a new Revision, signs Wiki events, and records the originating IP",
       async () => {
         first = revision("nostr", undefined, "Nostr is an open protocol.", [
-          ["title", "Nostr"],
+          ["title", "nostr"],
           ["summary", "A protocol overview"],
           ["edit_summary", "Initial article"],
         ]);
@@ -519,7 +519,7 @@ test(
         assert.equal(firstArticle.pubkey, wikiPubkey);
         assert.equal(tag(firstArticle, "head"), commit.id);
         assert.equal(firstArticle.content, first.content);
-        assert.equal(tag(firstArticle, "title"), "Nostr");
+        assert.equal(tag(firstArticle, "title"), "nostr");
         assert.equal(tag(firstArticle, "summary"), "A protocol overview");
         for (const event of [first, commit, firstArticle]) {
           verify(event);
@@ -579,6 +579,81 @@ test(
           db.exec(`INSERT INTO events (id, kind, pubkey, created_at, article_d, ref_event_id, seq, data)
       SELECT randomblob(32), kind, pubkey, created_at, article_d, randomblob(32), seq, data FROM events WHERE kind = 3818`),
         );
+      },
+    );
+
+    await t.test(
+      "enforces display titles and meaningful changes against the confirmed head",
+      async () => {
+        const d = "edit-rules";
+        const first = revision(d, undefined, "original");
+        assert.equal((await publish(client, first))[2], true);
+        const originalArticle = await wiki.getArticle(d);
+        let base = tag(originalArticle, "head");
+        const snapshot = async () => ({
+          events: await db.exec("SELECT * FROM events WHERE article_d = ?", d),
+          articles: await db.exec("SELECT * FROM articles WHERE d = ?", d),
+          fts: await db.exec("SELECT * FROM article_fts WHERE d = ?", d),
+          receipts: await db.exec("SELECT * FROM event_receipts"),
+        });
+        const before = await snapshot();
+        for (const [tags, reason] of [
+          [[], /no content or summary changes/],
+          [
+            [["edit_summary", "Only metadata"]],
+            /no content or summary changes/,
+          ],
+          [[["summary", ""]], /no content or summary changes/],
+          [[["title", "Edit Rules"]], /title cannot be changed/],
+        ]) {
+          const result = await publish(
+            client,
+            revision(d, base, "original", tags),
+          );
+          assert.equal(result[2], false);
+          assert.match(result[3], reason);
+          assert.deepEqual(await snapshot(), before);
+        }
+        // Explicit d and omitted title represent the same display title.
+        for (const [content, tags] of [
+          ["body changed", [["title", d]]],
+          ["body changed", [["summary", "overview"]]],
+          ["both changed", [["summary", "new overview"]]],
+          ["both changed", []],
+        ]) {
+          const event = revision(d, base, content, tags);
+          assert.equal((await publish(client, event))[2], true);
+          base = tag(await wiki.getArticle(d), "head");
+          assert.equal((await publish(client, event))[2], true);
+        }
+        // Simulate a published snapshot lagging behind the confirmed Commit.
+        await db.exec(
+          "UPDATE articles SET published_event_id = ? WHERE d = ?",
+          Buffer.from(originalArticle.id, "hex"),
+          d,
+        );
+        await db.exec(
+          "INSERT INTO events (id, kind, pubkey, created_at, article_d, data) VALUES (?, ?, ?, ?, ?, ?)",
+          Buffer.from(originalArticle.id, "hex"),
+          originalArticle.kind,
+          Buffer.from(originalArticle.pubkey, "hex"),
+          originalArticle.created_at,
+          d,
+          JSON.stringify(originalArticle),
+        );
+        const lagging = await snapshot();
+        const noop = await publish(
+          client,
+          revision(d, base, "both changed", [["summary", ""]]),
+        );
+        assert.equal(noop[2], false);
+        assert.match(noop[3], /no content or summary changes/);
+        assert.deepEqual(await snapshot(), lagging);
+        assert.equal(
+          (await publish(client, revision(d, base, "original")))[2],
+          true,
+        );
+        assert.equal((await wiki.getHistory(d)).length, 6);
       },
     );
 
@@ -1140,7 +1215,12 @@ test(
           (
             await publish(
               client,
-              revision("rank-content-exact", tag(original, "head"), "new text"),
+              revision(
+                "rank-content-exact",
+                tag(original, "head"),
+                "new text",
+                [["title", ""]],
+              ),
             )
           )[2],
           true,

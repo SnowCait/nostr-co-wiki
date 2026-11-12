@@ -126,6 +126,9 @@ Clients submit Revisions using the NIP-01 `EVENT` message. The dedicated relay v
 ### Existing Articles
 
 - A Revision is accepted only if its `e` tag references the current Commit of the target article.
+- NostrCoWiki requires the display title to remain unchanged. Compare title strings exactly, using `d` when `title` is omitted; omission and an explicit title equal to `d` are equivalent. These are NostrCoWiki Revision acceptance rules, not NIP-54 restrictions.
+- At least one of Djot `content` or `summary` MUST differ from the Revision referenced by the latest confirmed Commit, even when the published Article lags behind it. An omitted summary and an empty summary are equivalent. Changes to `edit_summary` alone do not qualify; edit summaries remain optional.
+- Title changes are rejected with `blocked: article title cannot be changed`; no-op edits with `blocked: Revision has no content or summary changes`. Rejection does not write events, history, receipts, or search entries. Previously accepted identical Revisions retain idempotent success.
 - Acceptance confirms a new Commit whose `prev` tag references the preceding Commit.
 - A Revision with a mismatched base Commit is rejected as a conflict. Automatic merging is not performed.
 

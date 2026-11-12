@@ -18,6 +18,7 @@
       content: string;
       summary: string;
       base?: string;
+      baseContent?: string;
       restored?: string;
       wikiPubkey: string;
       relayUrl: string;
@@ -31,6 +32,8 @@
     initial.restored ? `Restore content from ${initial.restored}` : "",
   );
   let base = $state(initial.base);
+  let baseContent = $state(initial.baseContent ?? initial.content);
+  let baseSummary = $state(initial.summary);
   const d = $derived(data.base ? data.d : normalizeIdentifier(articleTitle));
   let editorView = $state<"edit" | "preview">("edit");
   let origin = $state("");
@@ -233,6 +236,7 @@
     <label for="title">Title (required)</label><input
       id="title"
       bind:value={articleTitle}
+      readonly={!!data.base}
       required
     />
     <div class="article-address">
@@ -303,6 +307,7 @@
         class="primary"
         disabled={!signingAvailable ||
           !articleTitle.trim() ||
+          (!!base && content === baseContent && summary === baseSummary) ||
           !d ||
           (!data.base && availability !== "available")}
         >Sign and submit Revision</button
@@ -337,6 +342,8 @@
       <button
         onclick={() => {
           base = tag(latest!, "head");
+          baseContent = latest!.content;
+          baseSummary = tag(latest!, "summary") ?? "";
           notice =
             "Using the displayed Commit as base. Your draft is unchanged; review it before resubmitting.";
         }}>Use this Commit as base</button

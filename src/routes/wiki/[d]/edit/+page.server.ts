@@ -21,6 +21,7 @@ export async function load({
     d: params.d,
     title: title(article),
     content,
+    baseContent: article.content,
     summary: tag(article, "summary") ?? "",
     base: tag(article, "head")!,
     restored,
