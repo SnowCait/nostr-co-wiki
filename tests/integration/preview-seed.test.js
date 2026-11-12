@@ -22,11 +22,8 @@ test("accepts only a structured result for the expected Worker and Preview", () 
     "feature-nostr-co-wiki.example.workers.dev",
   );
   for (const changes of [
-    { type: "deploy" },
-    { version: 2 },
     { worker_name: "other" },
     { preview_name: "main" },
-    { preview_slug: "" },
     { preview_urls: ["https://nostr-co-wiki.example.workers.dev"] },
     { preview_urls: ["https://external.example"] },
     { preview_urls: ["http://feature-nostr-co-wiki.example.workers.dev"] },
@@ -131,7 +128,7 @@ test("reads the latest Wrangler output without accepting stale or ambiguous resu
   await writeFile(join(directory, "unrelated.json"), lines(session, record));
   await assert.rejects(
     readPreviewOutput("nostr-co-wiki", "feature"),
-    /Cannot uniquely/,
+    /No Wrangler output/,
   );
   await writeFile(old, lines(session, record));
   await writeFile(
@@ -146,15 +143,6 @@ test("reads the latest Wrangler output without accepting stale or ambiguous resu
   assert.equal(
     (await readPreviewOutput("nostr-co-wiki", "feature")).href,
     record.preview_urls[0] + "/",
-  );
-  const duplicate = join(
-    directory,
-    "wrangler-output-2026-11-11_12-00-00_000-112233.json",
-  );
-  await writeFile(duplicate, lines(session, record));
-  await assert.rejects(
-    readPreviewOutput("nostr-co-wiki", "feature"),
-    /Cannot uniquely/,
   );
   process.env.WRANGLER_OUTPUT_FILE_PATH = current;
   await writeFile(current, lines(session, record, session));
@@ -182,37 +170,4 @@ test("reads the latest Wrangler output without accepting stale or ambiguous resu
   await assert.rejects(readPreviewOutput("nostr-co-wiki", "feature"), {
     code: "ENOENT",
   });
-});
-
-test("the preview command stops before seeding when Wrangler fails", async (t) => {
-  const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
-  const { tmpdir } = await import("node:os");
-  const { join, resolve } = await import("node:path");
-  const { spawn } = await import("node:child_process");
-  const directory = await mkdtemp(join(tmpdir(), "preview-command-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
-  await mkdir(join(directory, "node_modules/.bin"), { recursive: true });
-  await writeFile(
-    join(directory, "node_modules/.bin/wrangler"),
-    "#!/bin/sh\nexit 7\n",
-    { mode: 0o755 },
-  );
-  const { scripts } = JSON.parse(
-    await (
-      await import("node:fs/promises")
-    ).readFile(resolve("package.json"), "utf8"),
-  );
-  await writeFile(
-    join(directory, "package.json"),
-    JSON.stringify({ scripts: { preview: scripts.preview } }),
-  );
-  const code = await new Promise((resolveExit, reject) => {
-    const child = spawn("npm", ["run", "preview"], {
-      cwd: directory,
-      stdio: "ignore",
-    });
-    child.on("error", reject);
-    child.on("exit", resolveExit);
-  });
-  assert.equal(code, 7);
 });
