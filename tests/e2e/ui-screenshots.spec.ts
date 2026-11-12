@@ -47,7 +47,13 @@ test("capture major Wiki screens at desktop and mobile sizes", async ({
       page: Page,
       state: string,
       viewport: (typeof viewports)[number],
+      language: "en" | "ja",
     ) => {
+      await expect(page.locator("html")).toHaveAttribute("lang", language);
+      await expect(page.locator("footer label[for=language]")).toHaveText(
+        language === "ja" ? "表示言語" : "Language",
+      );
+      await expect(page.locator("footer select")).toBeVisible();
       assert.equal(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth,
@@ -77,7 +83,7 @@ test("capture major Wiki screens at desktop and mobile sizes", async ({
                 .top + scrollY
             : undefined,
         }));
-        const seen = measurements.get(viewport.name) ?? [];
+        const seen = measurements.get(`${language}-${viewport.name}`) ?? [];
         if (seen.length) {
           assert.ok(
             Math.abs(seen[0].header - dimensions.header) <= 1,
@@ -92,43 +98,77 @@ test("capture major Wiki screens at desktop and mobile sizes", async ({
           }
         }
         seen.push(dimensions);
-        measurements.set(viewport.name, seen);
+        measurements.set(`${language}-${viewport.name}`, seen);
         console.log(
           `Layout ${viewport.name} ${state}: header=${dimensions.header}, nav=${dimensions.nav ?? "—"}`,
         );
         if (viewport.width === 390) {
           await expect(
-            page.getByRole("link", { name: "Search", exact: true }),
+            page.getByRole("link", {
+              name: language === "ja" ? "検索" : "Search",
+              exact: true,
+            }),
           ).toBeVisible();
         }
         await expect(
-          page.getByRole("search", { name: "Site search" }),
+          page.getByRole("search", {
+            name: language === "ja" ? "サイト内検索" : "Site search",
+          }),
         ).toHaveCount(
           viewport.width === 390 || path === "/" || path === "/search" ? 0 : 1,
         );
+        if (viewport.width === 1440 && path !== "/" && path !== "/search") {
+          const searchButton = page.locator(".header-search button");
+          const metrics = await searchButton.evaluate((button) => {
+            const style = getComputedStyle(button);
+            return {
+              height: button.clientHeight,
+              lineHeight: parseFloat(style.lineHeight),
+              verticalPadding:
+                parseFloat(style.paddingTop) + parseFloat(style.paddingBottom),
+              scrollHeight: button.scrollHeight,
+            };
+          });
+          assert.ok(
+            metrics.height <= metrics.lineHeight + metrics.verticalPadding + 1,
+            "header search label stays on one line",
+          );
+          assert.ok(
+            metrics.scrollHeight <= metrics.height,
+            "header search label is not clipped",
+          );
+        }
       }
       return page.screenshot({
         path: testInfo.outputPath(
           "ui-screenshots",
-          `${state}-${viewport.name}.png`,
+          `${state}-${language}-${viewport.name}.png`,
         ),
         fullPage: true,
       });
     };
 
     // Capture both empty home pages before populating the isolated Wiki.
-    for (const viewport of viewports) {
-      const page = await browser.newPage({
-        viewport: { width: viewport.width, height: viewport.height },
-      });
-      try {
-        await page.goto(base);
-        await page
-          .getByText("No published articles yet.", { exact: false })
-          .waitFor();
-        await screenshot(page, "home-empty", viewport);
-      } finally {
-        await page.close();
+    for (const language of ["en", "ja"] as const) {
+      for (const viewport of viewports) {
+        const page = await browser.newPage({
+          locale: language,
+          viewport: { width: viewport.width, height: viewport.height },
+        });
+        try {
+          await page.goto(base);
+          await page
+            .getByText(
+              language === "ja"
+                ? "公開記事はまだありません。"
+                : "No published articles yet.",
+              { exact: false },
+            )
+            .waitFor();
+          await screenshot(page, "home-empty", viewport, language);
+        } finally {
+          await page.close();
+        }
       }
     }
 
@@ -229,209 +269,310 @@ test("capture major Wiki screens at desktop and mobile sizes", async ({
     });
     assert.equal(hidden.status, 200, await hidden.text());
 
-    for (const viewport of viewports) {
-      await test.step(viewport.name, async () => {
-        const context = await browser.newContext({
-          viewport: { width: viewport.width, height: viewport.height },
-          extraHTTPHeaders: { "CF-Connecting-IP": "203.0.113.42" },
-        });
-        try {
-          const page = await context.newPage();
-          const errors: string[] = [];
-          page.on("pageerror", (error) => errors.push(error.message));
-          await page.exposeFunction(
-            "signScreenshotRequest",
-            (event: EventTemplate) => finalizeEvent(event, adminKey),
-          );
-          await page.addInitScript(() => {
-            globalThis.nostr = {
-              getPublicKey: async () => "",
-              signEvent: (event) => globalThis.signScreenshotRequest(event),
-            };
+    for (const language of ["en", "ja"] as const) {
+      for (const viewport of viewports) {
+        await test.step(`${language}-${viewport.name}`, async () => {
+          const context = await browser.newContext({
+            viewport: { width: viewport.width, height: viewport.height },
+            locale: language,
+            extraHTTPHeaders: { "CF-Connecting-IP": "203.0.113.42" },
           });
-          await page.goto(base);
-          await page
-            .getByRole("link", { name: "Getting started", exact: true })
-            .waitFor();
-          await page
-            .getByRole("link", { name: "Relay basics", exact: true })
-            .waitFor();
-          await expect(
-            page.getByRole("link", { name: "Private notes", exact: true }),
-          ).toHaveCount(0);
-          await screenshot(page, "home-populated", viewport);
-
-          await page.goto(base + "/search?q=relay");
-          await page
-            .getByRole("link", { name: "Relay basics", exact: true })
-            .waitFor();
-          await screenshot(page, "search-results", viewport);
-          await page.goto(base + "/search?q=missing-article-xyz");
-          await page.getByText("No articles found.", { exact: true }).waitFor();
-          await screenshot(page, "search-empty", viewport);
-
-          await page.goto(base + "/wiki/getting-started");
-          await page
-            .getByRole("heading", { name: "Explore the Wiki", exact: true })
-            .waitFor();
-          await screenshot(page, "article-published", viewport);
-
-          await page.goto(base + "/new");
-          await page.getByLabel("Title (required)").fill("Draft article");
-          await page
-            .getByLabel("Djot source")
-            .fill(
-              "## Draft preview\n\nA **collaborative** article with a [Getting started][] link.\n\n- Write in Djot\n- Preview before signing\n",
+          try {
+            const page = await context.newPage();
+            const errors: string[] = [];
+            page.on("pageerror", (error) => errors.push(error.message));
+            await page.exposeFunction(
+              "signScreenshotRequest",
+              (event: EventTemplate) => finalizeEvent(event, adminKey),
             );
-          await page
-            .getByLabel("Summary (optional)", { exact: true })
-            .fill("A draft ready for review.");
-          await page
-            .getByLabel("Edit summary (optional)")
-            .fill("Write the first draft");
-          await page
-            .getByText("This identifier is available.", { exact: false })
-            .waitFor();
-          if (viewport.width === 390) {
-            await screenshot(page, "article-create-source", viewport);
+            await page.addInitScript(() => {
+              globalThis.nostr = {
+                getPublicKey: async () => "",
+                signEvent: (event) => globalThis.signScreenshotRequest(event),
+              };
+            });
+            await page.goto(base);
             await page
-              .getByRole("button", { name: "Preview", exact: true })
-              .click();
+              .getByRole("link", { name: "Getting started", exact: true })
+              .waitFor();
+            await page
+              .getByRole("link", { name: "Relay basics", exact: true })
+              .waitFor();
             await expect(
-              page.getByRole("button", { name: "Preview", exact: true }),
-            ).toHaveAttribute("aria-pressed", "true");
-          }
-          await page
-            .getByRole("heading", { name: "Draft preview", exact: true })
-            .waitFor();
-          await page
-            .getByText("Waiting for a NIP-07", { exact: false })
-            .waitFor({ state: "hidden" });
-          await screenshot(page, "article-create-preview", viewport);
+              page.getByRole("link", { name: "Private notes", exact: true }),
+            ).toHaveCount(0);
+            await screenshot(page, "home-populated", viewport, language);
 
-          await page.goto(base + "/wiki/getting-started/edit");
-          await expect(page.getByLabel("Djot source")).toHaveValue(
-            currentContent,
-          );
-          if (viewport.width === 390) {
+            await page.goto(base + "/search?q=relay");
             await page
-              .getByRole("button", { name: "Preview", exact: true })
-              .click();
-          }
-          await page
-            .getByRole("heading", { name: "Explore the Wiki", exact: true })
-            .waitFor();
-          await page
-            .getByText("Waiting for a NIP-07", { exact: false })
-            .waitFor({ state: "hidden" });
-          if (viewport.width === 390) {
-            await screenshot(page, "article-edit-preview", viewport);
+              .getByRole("link", { name: "Relay basics", exact: true })
+              .waitFor();
+            await screenshot(page, "search-results", viewport, language);
+            await page.goto(base + "/search?q=missing-article-xyz");
             await page
-              .getByRole("button", { name: "Edit", exact: true })
-              .click();
-            await expect(page.getByLabel("Djot source")).toHaveValue(
-              currentContent,
-            );
-          }
-          await screenshot(page, "article-edit-loaded", viewport);
+              .getByText(
+                language === "ja"
+                  ? "記事が見つかりませんでした。"
+                  : "No articles found.",
+                { exact: true },
+              )
+              .waitFor();
+            await screenshot(page, "search-empty", viewport, language);
 
-          await page.goto(base + "/wiki/getting-started/history");
-          await page
-            .getByRole("link", { name: "Revision 3", exact: true })
-            .waitFor();
-          await expect(page.locator("ol.history > li > a").first()).toHaveText(
-            "Revision 3",
-          );
-          await screenshot(page, "history-revisions", viewport);
-          await page.goto(
-            base + "/wiki/getting-started/history/" + head(second),
-          );
-          await page.locator(".diff .added").first().waitFor();
-          await page.locator(".diff .removed").first().waitFor();
-          const widths = await page
-            .locator(".historical-content")
-            .evaluate((article) => ({
-              article: article.getBoundingClientRect().width,
-              diff: document.querySelector(".diff")!.getBoundingClientRect()
-                .width,
-              rem: parseFloat(
-                getComputedStyle(document.documentElement).fontSize,
-              ),
-            }));
-          assert.ok(widths.article <= 44 * widths.rem);
-          if (viewport.width === 1440) {
-            assert.ok(widths.diff > widths.article);
-          }
-          await screenshot(page, "history-detail-diff", viewport);
-          await page.getByRole("link", { name: "All revisions" }).click();
-          await expect(
-            page.getByRole("link", { name: "Revision 3", exact: true }),
-          ).toBeVisible();
+            await page.goto(base + "/wiki/getting-started");
+            await page
+              .getByRole("heading", { name: "Explore the Wiki", exact: true })
+              .waitFor();
+            await screenshot(page, "article-published", viewport, language);
 
-          const longPositions: number[] = [];
-          for (const suffix of [
-            "",
-            "/edit",
-            "/history",
-            "/history/" + head(longArticle),
-          ]) {
-            await page.goto(
-              base +
-                "/wiki/a-substantially-longer-article-title-that-wraps-across-multiple-lines-on-mobile" +
-                suffix,
-            );
-            await expect(
-              page.getByRole("heading", { name: longTitle, level: 1 }),
-            ).toBeVisible();
-            longPositions.push(
+            await page.goto(base + "/new");
+            await page
+              .getByLabel(
+                language === "ja" ? "タイトル（必須）" : "Title (required)",
+              )
+              .fill("Draft article");
+            await page
+              .getByLabel(language === "ja" ? "Djot ソース" : "Djot source")
+              .fill(
+                "## Draft preview\n\nA **collaborative** article with a [Getting started][] link.\n\n- Write in Djot\n- Preview before signing\n",
+              );
+            await page
+              .getByLabel(
+                language === "ja" ? "記事概要（任意）" : "Summary (optional)",
+                { exact: true },
+              )
+              .fill("A draft ready for review.");
+            await page
+              .getByLabel(
+                language === "ja"
+                  ? "編集概要（任意）"
+                  : "Edit summary (optional)",
+              )
+              .fill("Write the first draft");
+            await page
+              .getByText(
+                language === "ja"
+                  ? "この識別子は利用できます。"
+                  : "This identifier is available.",
+                { exact: false },
+              )
+              .waitFor();
+            if (viewport.width === 390) {
+              await screenshot(
+                page,
+                "article-create-source",
+                viewport,
+                language,
+              );
               await page
-                .locator(".article-nav")
-                .evaluate((nav) => nav.getBoundingClientRect().top + scrollY),
-            );
-          }
-          assert.ok(
-            Math.max(...longPositions) - Math.min(...longPositions) <= 1,
-            "wrapped title navigation position",
-          );
-          console.log(
-            `Long title ${viewport.name}: nav=${longPositions.join(", ")}`,
-          );
-          if (viewport.width === 390) {
+                .getByRole("button", {
+                  name: language === "ja" ? "プレビュー" : "Preview",
+                  exact: true,
+                })
+                .click();
+              await expect(
+                page.getByRole("button", {
+                  name: language === "ja" ? "プレビュー" : "Preview",
+                  exact: true,
+                }),
+              ).toHaveAttribute("aria-pressed", "true");
+            }
             await page
-              .getByRole("link", { name: "Search", exact: true })
+              .getByRole("heading", { name: "Draft preview", exact: true })
+              .waitFor();
+            await page
+              .getByText(
+                language === "ja" ? "NIP-07" : "Waiting for a NIP-07",
+                { exact: false },
+              )
+              .waitFor({ state: "hidden" });
+            await screenshot(
+              page,
+              "article-create-preview",
+              viewport,
+              language,
+            );
+
+            await page.goto(base + "/wiki/getting-started/edit");
+            await expect(
+              page.getByLabel(
+                language === "ja" ? "Djot ソース" : "Djot source",
+              ),
+            ).toHaveValue(currentContent);
+            if (viewport.width === 390) {
+              await page
+                .getByRole("button", {
+                  name: language === "ja" ? "プレビュー" : "Preview",
+                  exact: true,
+                })
+                .click();
+            }
+            await page
+              .getByRole("heading", { name: "Explore the Wiki", exact: true })
+              .waitFor();
+            await page
+              .getByText(
+                language === "ja" ? "NIP-07" : "Waiting for a NIP-07",
+                { exact: false },
+              )
+              .waitFor({ state: "hidden" });
+            if (viewport.width === 390) {
+              await screenshot(
+                page,
+                "article-edit-preview",
+                viewport,
+                language,
+              );
+              await page
+                .getByRole("button", {
+                  name: language === "ja" ? "編集" : "Edit",
+                  exact: true,
+                })
+                .click();
+              await expect(
+                page.getByLabel(
+                  language === "ja" ? "Djot ソース" : "Djot source",
+                ),
+              ).toHaveValue(currentContent);
+            }
+            await screenshot(page, "article-edit-loaded", viewport, language);
+
+            await page.goto(base + "/wiki/getting-started/history");
+            await page
+              .getByRole("link", {
+                name: language === "ja" ? "第3版" : "Revision 3",
+                exact: true,
+              })
+              .waitFor();
+            await expect(
+              page.locator("ol.history > li > a").first(),
+            ).toHaveText(language === "ja" ? "第3版" : "Revision 3");
+            await screenshot(page, "history-revisions", viewport, language);
+            await page.goto(
+              base + "/wiki/getting-started/history/" + head(second),
+            );
+            await page.locator(".diff .added").first().waitFor();
+            await page.locator(".diff .removed").first().waitFor();
+            const widths = await page
+              .locator(".historical-content")
+              .evaluate((article) => ({
+                article: article.getBoundingClientRect().width,
+                diff: document.querySelector(".diff")!.getBoundingClientRect()
+                  .width,
+                rem: parseFloat(
+                  getComputedStyle(document.documentElement).fontSize,
+                ),
+              }));
+            assert.ok(widths.article <= 44 * widths.rem);
+            if (viewport.width === 1440) {
+              assert.ok(widths.diff > widths.article);
+            }
+            await screenshot(page, "history-detail-diff", viewport, language);
+            await page
+              .getByRole("link", {
+                name: language === "ja" ? "すべての履歴" : "All revisions",
+              })
               .click();
-            await expect(page).toHaveURL(base + "/search");
-            await expect(page.getByLabel("Search query")).toBeVisible();
+            await expect(
+              page.getByRole("link", {
+                name: language === "ja" ? "第3版" : "Revision 3",
+                exact: true,
+              }),
+            ).toBeVisible();
+
+            const longPositions: number[] = [];
+            for (const suffix of [
+              "",
+              "/edit",
+              "/history",
+              "/history/" + head(longArticle),
+            ]) {
+              await page.goto(
+                base +
+                  "/wiki/a-substantially-longer-article-title-that-wraps-across-multiple-lines-on-mobile" +
+                  suffix,
+              );
+              await expect(
+                page.getByRole("heading", { name: longTitle, level: 1 }),
+              ).toBeVisible();
+              longPositions.push(
+                await page
+                  .locator(".article-nav")
+                  .evaluate((nav) => nav.getBoundingClientRect().top + scrollY),
+              );
+            }
+            assert.ok(
+              Math.max(...longPositions) - Math.min(...longPositions) <= 1,
+              "wrapped title navigation position",
+            );
+            console.log(
+              `Long title ${viewport.name}: nav=${longPositions.join(", ")}`,
+            );
+            if (viewport.width === 390) {
+              await page
+                .getByRole("link", {
+                  name: language === "ja" ? "検索" : "Search",
+                  exact: true,
+                })
+                .click();
+              await expect(page).toHaveURL(base + "/search");
+              await expect(
+                page.getByLabel(language === "ja" ? "検索語" : "Search query"),
+              ).toBeVisible();
+            }
+            await page.goto(base + "/admin");
+            await page
+              .getByRole("heading", {
+                name: language === "ja" ? "Wiki 管理" : "Wiki administration",
+                exact: true,
+              })
+              .waitFor();
+            await page
+              .getByText(
+                language === "ja" ? "NIP-07" : "Waiting for a NIP-07",
+                { exact: false },
+              )
+              .waitFor({ state: "hidden" });
+            await screenshot(page, "admin-initial", viewport, language);
+            await page
+              .getByRole("link", {
+                name: language === "ja" ? "記事を管理" : "Manage articles",
+                exact: true,
+              })
+              .click();
+            await page
+              .getByRole("button", {
+                name: language === "ja" ? "記事一覧を取得" : "Load articles",
+                exact: true,
+              })
+              .click();
+            await page
+              .getByRole("heading", { name: "Private notes", exact: true })
+              .waitFor();
+            await page
+              .getByText(language === "ja" ? "非公開" : "Unpublished", {
+                exact: true,
+              })
+              .waitFor();
+            await page
+              .getByText(language === "ja" ? "公開中" : "Published", {
+                exact: true,
+              })
+              .first()
+              .waitFor();
+            await page
+              .locator("button:not([disabled])")
+              .filter({
+                hasText: language === "ja" ? "記事一覧を取得" : "Load articles",
+              })
+              .waitFor();
+            await screenshot(page, "admin-articles-loaded", viewport, language);
+            assert.deepEqual(errors, []);
+          } finally {
+            await context.close();
           }
-          await page.goto(base + "/admin");
-          await page
-            .getByRole("heading", { name: "Wiki administration", exact: true })
-            .waitFor();
-          await page
-            .getByText("Waiting for a NIP-07", { exact: false })
-            .waitFor({ state: "hidden" });
-          await screenshot(page, "admin-initial", viewport);
-          await page
-            .getByRole("link", { name: "Manage articles", exact: true })
-            .click();
-          await page
-            .getByRole("button", { name: "Load articles", exact: true })
-            .click();
-          await page
-            .getByRole("heading", { name: "Private notes", exact: true })
-            .waitFor();
-          await page.getByText("Unpublished", { exact: true }).waitFor();
-          await page.getByText("Published", { exact: true }).first().waitFor();
-          await page
-            .locator("button:not([disabled])")
-            .filter({ hasText: "Load articles" })
-            .waitFor();
-          await screenshot(page, "admin-articles-loaded", viewport);
-          assert.deepEqual(errors, []);
-        } finally {
-          await context.close();
-        }
-      });
+        });
+      }
     }
   } finally {
     await server.close();
