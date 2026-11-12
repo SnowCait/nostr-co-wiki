@@ -102,13 +102,52 @@ test("capture major Wiki screens at desktop and mobile sizes", async ({
         console.log(
           `Layout ${viewport.name} ${state}: header=${dimensions.header}, nav=${dimensions.nav ?? "—"}`,
         );
+        const hasPageSearch = path === "/" || path === "/search";
+        const mobileSearch = page.locator(".site-header .mobile-search");
+        await expect(mobileSearch).toHaveCount(hasPageSearch ? 0 : 1);
         if (viewport.width === 390) {
-          await expect(
-            page.getByRole("link", {
-              name: language === "ja" ? "検索" : "Search",
-              exact: true,
-            }),
-          ).toBeVisible();
+          if (hasPageSearch) {
+            await expect(page.locator("main form[role=search]")).toBeVisible();
+          } else {
+            await expect(mobileSearch).toBeVisible();
+          }
+          const layout = await page
+            .locator(".site-header nav")
+            .evaluate((nav) => {
+              const wordmark = nav
+                .querySelector(".wordmark")!
+                .getBoundingClientRect();
+              const create = nav
+                .querySelector(".create-link")!
+                .getBoundingClientRect();
+              const search = nav
+                .querySelector(".mobile-search")
+                ?.getBoundingClientRect();
+              const rect = nav.getBoundingClientRect();
+              return {
+                columns:
+                  getComputedStyle(nav).gridTemplateColumns.split(" ").length,
+                left: wordmark.left,
+                wordmarkRight: wordmark.right,
+                searchLeft: search?.left,
+                searchRight: search?.right,
+                createLeft: create.left,
+                right: create.right,
+                navLeft: rect.left,
+                navRight: rect.right,
+              };
+            });
+          assert.equal(layout.columns, hasPageSearch ? 2 : 3);
+          assert.ok(
+            Math.abs(layout.left - layout.navLeft) <= 1 &&
+              Math.abs(layout.right - layout.navRight) <= 1,
+          );
+          assert.ok(
+            layout.wordmarkRight <= (layout.searchLeft ?? layout.createLeft),
+          );
+          if (layout.searchRight !== undefined) {
+            assert.ok(layout.searchRight <= layout.createLeft);
+          }
         }
         await expect(
           page.getByRole("search", {

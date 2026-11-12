@@ -594,7 +594,7 @@ output {
     padding: 0 0.5rem;
   }
   .public-wiki .site-header nav:not(:has(.header-search)) {
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: 1fr auto;
   }
   .public-wiki .create-link {
     padding-inline: 0.6rem;

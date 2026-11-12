@@ -38,10 +38,10 @@
               required
             />
             <button>{i18n.t("common.search")}</button>
-          </form>{/if}
-        <a class="mobile-search" href={resolve("/search")}
-          >{i18n.t("common.search")}</a
-        >
+          </form>
+          <a class="mobile-search" href={resolve("/search")}
+            >{i18n.t("common.search")}</a
+          >{/if}
         <a class="create-link" href={resolve("/new")}
           >{i18n.t("common.create_article")}</a
         >
