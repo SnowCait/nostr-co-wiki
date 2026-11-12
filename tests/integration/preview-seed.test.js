@@ -105,7 +105,7 @@ test("reports connection failures and relay rejection separately", async (t) => 
   );
 });
 
-test("reads only one current matching Preview from standard output files", async (t) => {
+test("reads the latest Wrangler output without accepting stale or ambiguous results", async (t) => {
   const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
@@ -117,47 +117,60 @@ test("reads only one current matching Preview from standard output files", async
   });
   delete process.env.WRANGLER_OUTPUT_FILE_PATH;
   process.env.WRANGLER_OUTPUT_FILE_DIRECTORY = directory;
-  const started = Date.now() - 1000;
-  process.env.WIKI_PREVIEW_STARTED_AT = String(started);
-  const old = { ...record, timestamp: new Date(started - 1).toISOString() };
-  const current = { ...record, timestamp: new Date(started).toISOString() };
-  await writeFile(join(directory, "unrelated.json"), JSON.stringify(current));
-  await writeFile(
-    join(directory, "wrangler-output-old.json"),
-    JSON.stringify(old),
+  const old = join(
+    directory,
+    "wrangler-output-2026-11-10_12-00-00_000-aabbcc.json",
   );
+  const current = join(
+    directory,
+    "wrangler-output-2026-11-11_12-00-00_000-ddeeff.json",
+  );
+  const session = { type: "wrangler-session" };
+  const lines = (...entries) =>
+    entries.map((entry) => JSON.stringify(entry)).join("\n");
+  await writeFile(join(directory, "unrelated.json"), lines(session, record));
+  await assert.rejects(
+    readPreviewOutput("nostr-co-wiki", "feature"),
+    /Cannot uniquely/,
+  );
+  await writeFile(old, lines(session, record));
+  await writeFile(
+    current,
+    lines(session, { ...record, preview_name: "other" }),
+  );
+  await assert.rejects(
+    readPreviewOutput("nostr-co-wiki", "feature"),
+    /Unrecognized/,
+  );
+  await writeFile(current, lines(session, record));
+  assert.equal(
+    (await readPreviewOutput("nostr-co-wiki", "feature")).href,
+    record.preview_urls[0] + "/",
+  );
+  const duplicate = join(
+    directory,
+    "wrangler-output-2026-11-11_12-00-00_000-112233.json",
+  );
+  await writeFile(duplicate, lines(session, record));
+  await assert.rejects(
+    readPreviewOutput("nostr-co-wiki", "feature"),
+    /Cannot uniquely/,
+  );
+  process.env.WRANGLER_OUTPUT_FILE_PATH = current;
+  await writeFile(current, lines(session, record, session));
   await assert.rejects(
     readPreviewOutput("nostr-co-wiki", "feature"),
     /found 0/,
   );
-  const file = join(directory, "wrangler-output-current.json");
-  await writeFile(
-    file,
-    [old, { ...current, preview_name: "other" }, current]
-      .map((x) => JSON.stringify(x))
-      .join("\n"),
-  );
+  await writeFile(current, lines(session, record, session, record));
   assert.equal(
     (await readPreviewOutput("nostr-co-wiki", "feature")).href,
     record.preview_urls[0] + "/",
   );
   await writeFile(
-    join(directory, "wrangler-output-duplicate.json"),
-    JSON.stringify(current),
-  );
-  await assert.rejects(
-    readPreviewOutput("nostr-co-wiki", "feature"),
-    /found 2/,
-  );
-  process.env.WRANGLER_OUTPUT_FILE_PATH = file;
-  assert.equal(
-    (await readPreviewOutput("nostr-co-wiki", "feature")).href,
-    record.preview_urls[0] + "/",
-  );
-  await writeFile(
-    file,
-    JSON.stringify({
-      ...current,
+    current,
+    lines(session, {
+      ...record,
       preview_urls: ["https://nostr-co-wiki.example.workers.dev"],
     }),
   );

@@ -20,7 +20,7 @@
     "test:integration": "node --test \"tests/integration/**/*.test.js\"",
     "test:e2e": "playwright test",
     "check:e2e": "tsc --noEmit -p tests/e2e/tsconfig.json",
-    "preview": "WIKI_PREVIEW_STARTED_AT=$(node -p 'Date.now()') && export WIKI_PREVIEW_STARTED_AT && wrangler preview && node scripts/preview.ts"
+    "preview": "wrangler preview && node scripts/preview.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

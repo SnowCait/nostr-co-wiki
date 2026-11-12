@@ -45,53 +45,55 @@ export function previewURL(
   }
   throw new Error("No verified workers.dev Preview URL");
 }
-// The npm script records its start before running Wrangler. Record timestamps
-// distinguish this invocation from previous output without modifying its destination.
 export async function readPreviewOutput(worker: string, branch: string) {
-  const started = Number(process.env.WIKI_PREVIEW_STARTED_AT);
-  const now = Date.now();
-  if (!Number.isSafeInteger(started) || started <= 0 || started > now) {
-    throw new Error("Missing or invalid Preview invocation start time");
-  }
   const file = process.env.WRANGLER_OUTPUT_FILE_PATH;
   const directory = process.env.WRANGLER_OUTPUT_FILE_DIRECTORY;
-  let paths: string[];
+  let path: string;
   if (file) {
-    paths = [file];
+    path = file;
   } else if (directory) {
-    paths = (await readdir(directory))
-      .filter((name) => /^wrangler-output-.+\.json$/.test(name))
-      .map((name) => join(directory, name));
+    // Wrangler names files with a UTC millisecond timestamp and random suffix.
+    const files = (await readdir(directory))
+      .map((name) => ({
+        name,
+        match:
+          /^wrangler-output-(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_\d{3})-[a-f0-9]{6}\.json$/.exec(
+            name,
+          ),
+      }))
+      .filter((entry) => entry.match)
+      .sort((a, b) => b.match![1].localeCompare(a.match![1]));
+    if (
+      !files.length ||
+      (files.length > 1 && files[0].match![1] === files[1].match![1])
+    ) {
+      throw new Error(
+        "Cannot uniquely identify the latest Wrangler output file",
+      );
+    }
+    path = join(directory, files[0].name);
   } else {
     throw new Error("Wrangler output destination is not configured");
   }
-  const candidates: URL[] = [];
-  for (const path of paths) {
-    const records = (await readFile(path, "utf8"))
-      .split("\n")
-      .filter((line) => line.trim())
-      .map((line) => JSON.parse(line));
-    for (const record of records) {
-      const timestamp = Date.parse(record.timestamp);
-      if (
-        record.type !== "preview" ||
-        record.worker_name !== worker ||
-        record.preview_name !== branch ||
-        !Number.isFinite(timestamp) ||
-        timestamp < started ||
-        timestamp > now
-      ) {
-        continue;
-      }
-      candidates.push(previewURL(record, worker, branch));
-    }
+  const records = (await readFile(path, "utf8"))
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line));
+  const session = records.findLastIndex(
+    (record) => record.type === "wrangler-session",
+  );
+  if (session < 0) {
+    throw new Error("Missing Wrangler session in output");
   }
-  if (candidates.length !== 1) {
+  const previews = records
+    .slice(session + 1)
+    .filter((record) => record.type === "preview");
+  if (previews.length !== 1) {
     throw new Error(
-      `Expected one current Preview deployment; found ${candidates.length}`,
+      `Expected one Preview deployment in the latest session; found ${previews.length}`,
     );
   }
-  return candidates[0];
+  return previewURL(previews[0], worker, branch);
 }
 export async function seedDeployedPreview() {
   const branch = process.env.WORKERS_CI_BRANCH;
